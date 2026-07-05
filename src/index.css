@@ -1,0 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { -webkit-tap-highlight-color: transparent; }
+body { font-family: 'Outfit', sans-serif; background: #0B0E14; color: #F1F5F9; overflow: hidden; height: 100dvh; }
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: #252D3D; border-radius: 3px; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spinWheel { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.anim-in { animation: fadeIn 0.3s ease both; }
+.spin-anim { animation: spinWheel 2s cubic-bezier(0.2, 0.8, 0.3, 1) forwards; }
