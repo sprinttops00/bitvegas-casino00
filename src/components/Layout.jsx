@@ -11,7 +11,7 @@ const navItems = [
 
 export default function Layout() {
   return (
-    <div className="min-h-screen bg-background flex flex-col max-w-md mx-auto relative">
+    <div className="h-dvh overflow-hidden bg-background flex flex-col max-w-md mx-auto relative">
       {/* Background decorations */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none max-w-md mx-auto left-0 right-0">
         <div className="absolute top-0 left-1/4 w-64 h-64 bg-primary/5 rounded-full blur-3xl" />
@@ -19,7 +19,7 @@ export default function Layout() {
       </div>
 
       {/* Content */}
-      <main className="flex-1 pb-24 relative z-10">
+      <main className="flex-1 overflow-y-auto pb-24 relative z-10">
         <Outlet />
       </main>
 
