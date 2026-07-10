@@ -12,6 +12,14 @@ export const userDB = {
       .select('*, user_statistics(*)')
       .eq('telegram_id', telegramId)
       .single()
+    if (data) {
+      // Supabase puede devolver user_statistics como array [{...}] o como objeto {...}
+      // según cómo detecte la relación. Normalizamos siempre a un objeto único
+      // para que total_games_played, total_wins, best_streak, etc. se lean correctamente.
+      data.user_statistics = Array.isArray(data.user_statistics)
+        ? (data.user_statistics[0] || null)
+        : data.user_statistics
+    }
     return data
   },
 
