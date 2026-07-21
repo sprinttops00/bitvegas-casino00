@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { getCurrentUser } from '@/lib/telegramUser'
 import { userDB } from '@/lib/db'
 import { showAd } from '@/lib/adsgram'
@@ -16,7 +16,11 @@ export default function Lobby() {
   const [watchingAd, setWatchingAd] = useState(false)
   const [adMessage, setAdMessage] = useState(null)
 
-  useEffect(() => { loadPlayer() }, [])
+  // Recargamos los datos del jugador siempre que el Lobby vuelve a estar
+  // activo. Así las estadísticas (Jugadas / Victorias / Mejor racha) y el
+  // balance se muestran actualizados tras jugar cualquier partida.
+  const location = useLocation()
+  useEffect(() => { loadPlayer() }, [location.key])
 
   const loadPlayer = async () => {
     const tgUser = getCurrentUser()
