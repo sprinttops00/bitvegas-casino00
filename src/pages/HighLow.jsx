@@ -56,8 +56,6 @@ export default function HighLow() {
     setStreak(newStreak)
     setOutcome({ won, payout: totalPayout, next: displayNext, choice, streakBonus })
 
-    const newBestStreak = Math.max(player.user_statistics?.best_streak || 0, newStreak)
-
     const updated = await userDB.update(player.id, {
       tokens: newTokens,
       points: (player.points || 0) + (won ? 25 : 3),
@@ -74,13 +72,11 @@ export default function HighLow() {
       gameDetails: { choice, streakBonus },
     })
 
-    await statsDB.update(player.id, {
-      total_games_played: (player.user_statistics?.total_games_played || 0) + 1,
-      total_wins: (player.user_statistics?.total_wins || 0) + (won ? 1 : 0),
-      total_losses: (player.user_statistics?.total_losses || 0) + (won ? 0 : betAmount),
-      biggest_win: Math.max(player.user_statistics?.biggest_win || 0, won ? totalPayout : 0),
-      current_streak: newStreak,
-      best_streak: newBestStreak,
+    await statsDB.recordGame({
+      userId: player.id,
+      won,
+      payout: totalPayout,
+      betAmount,
     })
 
     setTimeout(() => { setCurrentNumber(displayNext); setNextNumber(null); setGuessing(false) }, 1500)
