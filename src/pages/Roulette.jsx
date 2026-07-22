@@ -123,8 +123,6 @@ export default function Roulette() {
       const multiplier = getPayoutMultiplier(selectedBet)
       const payout = won ? Math.floor(betAmount * multiplier) : 0
       const newTokens = player.tokens - betAmount + payout
-      const newStreak = won ? (player.user_statistics?.current_streak || 0) + 1 : 0
-      const newBestStreak = Math.max(player.user_statistics?.best_streak || 0, newStreak)
 
       setOutcome({ won, payout, resultNumber })
 
@@ -144,14 +142,11 @@ export default function Roulette() {
         gameDetails: { betType: selectedBet, exactNumber },
       })
 
-      await statsDB.update(player.id, {
-        total_games_played: (player.user_statistics?.total_games_played || 0) + 1,
-        total_wins: (player.user_statistics?.total_wins || 0) + (won ? 1 : 0),
-        total_winnings: (player.user_statistics?.total_winnings || 0) + (won ? payout : 0),
-        total_losses: (player.user_statistics?.total_losses || 0) + (won ? 0 : betAmount),
-        biggest_win: Math.max(player.user_statistics?.biggest_win || 0, won ? payout : 0),
-        current_streak: newStreak,
-        best_streak: newBestStreak,
+      await statsDB.recordGame({
+        userId: player.id,
+        won,
+        payout,
+        betAmount,
       })
 
       setSpinning(false)
