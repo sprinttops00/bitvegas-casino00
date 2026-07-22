@@ -72,8 +72,6 @@ export default function Crash() {
 
   const saveResult = async (won, payout, at, currentPlayer) => {
     const newTokens = currentPlayer.tokens + (won ? payout : 0)
-    const newStreak = won ? (currentPlayer.user_statistics?.current_streak || 0) + 1 : 0
-    const newBestStreak = Math.max(currentPlayer.user_statistics?.best_streak || 0, newStreak)
 
     const updated = await userDB.update(currentPlayer.id, {
       tokens: newTokens,
@@ -91,13 +89,11 @@ export default function Crash() {
       gameDetails: { cashedAt: at },
     })
 
-    await statsDB.update(currentPlayer.id, {
-      total_games_played: (currentPlayer.user_statistics?.total_games_played || 0) + 1,
-      total_wins: (currentPlayer.user_statistics?.total_wins || 0) + (won ? 1 : 0),
-      total_losses: (currentPlayer.user_statistics?.total_losses || 0) + (won ? 0 : betAmount),
-      biggest_win: Math.max(currentPlayer.user_statistics?.biggest_win || 0, won ? payout : 0),
-      current_streak: newStreak,
-      best_streak: newBestStreak,
+    await statsDB.recordGame({
+      userId: currentPlayer.id,
+      won,
+      payout,
+      betAmount,
     })
   }
 
