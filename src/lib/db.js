@@ -121,6 +121,31 @@ export const statsDB = {
       .single()
     return data
   },
+
+  // Registra una partida terminada y devuelve las estadísticas actualizadas.
+  //
+  // IMPORTANTE: lee SIEMPRE el estado actual desde la base de datos antes de
+  // sumar. Así evitamos el bug por el que, tras la primera partida, los datos
+  // en memoria del jugador quedaban vacíos y se sobreescribía el progreso
+  // real con valores reiniciados (todo se quedaba "trabado" en 1).
+  async recordGame({ userId, won, payout = 0, betAmount = 0 }) {
+    const current = (await statsDB.getByUserId(userId)) || {}
+
+    const newStreak = won ? (current.current_streak || 0) + 1 : 0
+    const next = {
+      total_games_played: (current.total_games_played || 0) + 1,
+      total_wins: (current.total_wins || 0) + (won ? 1 : 0),
+      total_winnings: (current.total_winnings || 0) + (won ? payout : 0),
+      total_losses: (current.total_losses || 0) + (won ? 0 : betAmount),
+      biggest_win: Math.max(current.biggest_win || 0, won ? payout : 0),
+      current_streak: newStreak,
+      best_streak: Math.max(current.best_streak || 0, newStreak),
+      updated_at: new Date().toISOString(),
+    }
+
+    await statsDB.update(userId, next)
+    return next
+  },
 }
 
 // ── DAILY REWARDS ─────────────────────────────────────────
