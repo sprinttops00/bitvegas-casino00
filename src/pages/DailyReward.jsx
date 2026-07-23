@@ -4,6 +4,7 @@ import { userDB, dailyRewardsDB } from '@/lib/db'
 import { ArrowLeft, CheckCircle, Lock } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import Avatar from '@/components/Avatar'
 
 const TOTAL_DAYS = 30
 const getDayReward = (day) => day * 10
@@ -65,9 +66,14 @@ export default function DailyReward() {
         <Link to="/" className="w-9 h-9 rounded-xl bg-secondary/60 border border-border flex items-center justify-center shrink-0">
           <ArrowLeft size={18} />
         </Link>
-        <div>
-          <h1 className="text-xl font-black text-foreground">Recompensa Diaria</h1>
+        <Avatar src={player?.photo_url} name={player?.username || player?.first_name} size={40} />
+        <div className="flex-1">
+          <h1 className="text-lg font-black text-foreground">Recompensa Diaria</h1>
           <p className="text-[10px] text-muted-foreground">Reclama cada día sin fallar</p>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] text-muted-foreground">TOKENS</div>
+          <div className="text-base font-black text-primary">{(player?.tokens || 0).toLocaleString()}</div>
         </div>
       </div>
 
