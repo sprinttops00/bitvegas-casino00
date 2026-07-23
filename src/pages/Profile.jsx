@@ -4,6 +4,7 @@ import { userDB, gameHistoryDB, withdrawalDB, referralDB } from '@/lib/db'
 import { ArrowLeft, Copy, Check, Users, TrendingUp, Coins, Trophy, Target, Clock } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import Avatar from '@/components/Avatar'
 
 export default function Profile() {
   const [player, setPlayer] = useState(null)
@@ -43,7 +44,8 @@ export default function Profile() {
 
   const stats = player?.user_statistics || {}
   const totalGames = stats.total_games_played || 0
-  const winRate = totalGames > 0 ? Math.round(((stats.total_winnings || 0) / totalGames) * 100) : 0
+  const totalWins = stats.total_wins || 0
+  const winRate = totalGames > 0 ? Math.round((totalWins / totalGames) * 100) : 0
 
   const statusColor = (s) => s === 'completed' ? 'text-green-400' : s === 'failed' ? 'text-red-400' : 'text-yellow-400'
 
@@ -54,9 +56,7 @@ export default function Profile() {
           <ArrowLeft size={18} />
         </Link>
         <div className="flex items-center gap-3 flex-1">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/40 to-primary/10 border border-primary/40 flex items-center justify-center text-xl font-black text-primary">
-            {(player?.username || player?.first_name)?.[0]?.toUpperCase() || '?'}
-          </div>
+          <Avatar src={player?.photo_url} name={player?.username || player?.first_name} size={48} />
           <div>
             <h1 className="text-lg font-black text-foreground">{player?.username || player?.first_name || '...'}</h1>
             <p className="text-xs text-muted-foreground">{(player?.points || 0).toLocaleString()} PTS</p>
