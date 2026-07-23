@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/telegramUser'
 import { userDB } from '@/lib/db'
 import { Crown, Medal, ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import Avatar from '@/components/Avatar'
 
 export default function Ranking() {
   const [players, setPlayers] = useState([])
@@ -66,8 +67,8 @@ export default function Ranking() {
           return (
             <div key={p.id} className={`rounded-xl px-3 py-3 flex items-center gap-3 border transition-all ${getRankBg(rank)} ${isMe ? 'ring-1 ring-primary/40' : ''}`}>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-card/50">{getRankIcon(rank)}</div>
-              <div className="w-9 h-9 rounded-full bg-secondary border border-border flex items-center justify-center text-base">
-                {(p.username || p.first_name)?.[0]?.toUpperCase() || '?'}
+              <div className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center">
+                <Avatar src={p.photo_url} name={p.username || p.first_name} size={36} className="rounded-full border-0" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground truncate">
