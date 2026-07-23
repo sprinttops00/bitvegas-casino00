@@ -7,12 +7,12 @@ import { processAdReward } from '@/lib/finance'
 import { CONFIG } from '@/lib/config'
 import { ChevronRight, Bell } from 'lucide-react'
 import WelcomeModal from '@/components/WelcomeModal'
+import Avatar from '@/components/Avatar'
 
 export default function Lobby() {
   const [player, setPlayer] = useState(null)
   const [dailyClaimed, setDailyClaimed] = useState(false)
   const [showWelcome, setShowWelcome] = useState(false)
-  const [avatarError, setAvatarError] = useState(false)
   const [watchingAd, setWatchingAd] = useState(false)
   const [adMessage, setAdMessage] = useState(null)
 
@@ -74,19 +74,7 @@ export default function Lobby() {
 
       <div className="px-4 pt-5 pb-3 flex items-center gap-3">
         <Link to="/profile">
-          <div className="w-14 h-14 rounded-2xl border-2 border-primary/50 overflow-hidden flex items-center justify-center shrink-0"
-            style={{ background: 'radial-gradient(circle at 35% 30%, rgba(212,160,23,0.4), rgba(0,0,0,0.6))', boxShadow: '0 0 16px rgba(212,160,23,0.3)' }}>
-            {player?.photo_url && !avatarError ? (
-              <img
-                src={player.photo_url}
-                alt="avatar"
-                className="w-full h-full object-cover"
-                onError={() => setAvatarError(true)}
-              />
-            ) : (
-              <span className="text-2xl font-black text-primary">{player?.username?.[0]?.toUpperCase() || player?.first_name?.[0]?.toUpperCase() || '?'}</span>
-            )}
-          </div>
+          <Avatar src={player?.photo_url} name={player?.username || player?.first_name} size={56} />
         </Link>
         <div>
           <p className="text-sm text-muted-foreground">¡HOLA!, <span className="text-primary font-black">{player?.username || player?.first_name || '...'}</span></p>
