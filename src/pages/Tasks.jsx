@@ -1,9 +1,25 @@
 import { useEffect, useState } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
 import { userDB, tasksDB, achievementsDB, referralDB } from '@/lib/db'
-import { CheckCircle, Zap, ArrowLeft, Lock } from 'lucide-react'
+import { Zap, ArrowLeft, Lock } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Avatar from '@/components/Avatar'
+
+// Categorías de tareas y logros. En cada categoría solo se muestra UNA
+// tarea/logro a la vez (la actual de la cadena). Al reclamarla, aparece
+// la siguiente. La última de la cadena queda fija e inhabilitada.
+const TASK_CATEGORIES = ['social', 'referral', 'games_played', 'games_won']
+const ACH_CATEGORIES = ['total_winnings', 'games_played', 'best_streak']
+
+// Devuelve la tarea/logro "actual" de una cadena: la primera NO reclamada.
+// Si ya se reclamaron todas, devuelve la última (se queda fija, "Reclamado").
+function pickCurrent(items, completedIds) {
+  const sorted = [...items].sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+  if (sorted.length === 0) return null
+  const firstPending = sorted.find(it => !completedIds.includes(it.id))
+  if (firstPending) return { item: firstPending, allDone: false }
+  return { item: sorted[sorted.length - 1], allDone: true }
+}
 
 export default function Tasks() {
   const [player, setPlayer] = useState(null)
@@ -36,68 +52,92 @@ export default function Tasks() {
     setReferralCount(refs.length)
   }
 
-  // Calcula el progreso real del jugador para una tarea o logro automático.
-  // Devuelve { current, target, isComplete }.
-  // Para tareas 'social' no hay progreso numérico (se reclama a mano).
+  // Compara el requisito de una tarea/logro con las estadísticas REALES
+  // del jugador (leídas de la base de datos). Si no cumple, no se puede
+  // reclamar. Para 'social' no hay verificación numérica posible.
   const getProgress = (item) => {
     const stats = player?.user_statistics || {}
     const target = Number(item.requirement) || 0
     let current = 0
     switch (item.type) {
       case 'games_played': current = stats.total_games_played || 0; break
-      case 'games_won':    current = stats.total_wins || 0; break
+      case 'games_won': current = stats.total_wins || 0; break
       case 'total_winnings': current = stats.total_winnings || 0; break
-      case 'best_streak':  current = stats.best_streak || 0; break
-      case 'referral':     current = referralCount; break
-      default: return { current: null, target: null, isComplete: false } // 'social'
+      case 'best_streak': current = stats.best_streak || 0; break
+      case 'referral': current = referralCount; break
+      default: return { current: null, target: null, isComplete: false }
     }
     return { current, target, isComplete: current >= target }
   }
 
+  const creditReward = async (rewardTokens, rewardPoints) => {
+    const updated = await userDB.update(player.id, {
+      tokens: player.tokens + (rewardTokens || 0),
+      points: (player.points || 0) + (rewardPoints || 0),
+    })
+    setPlayer(updated)
+  }
+
   const claimTask = async (task) => {
     if (!player || claiming) return
-    // Para tareas automáticas, verificar que realmente se cumple la condición
+    if (completedTaskIds.includes(task.id)) return
+    // VERIFICACIÓN REAL: las tareas automáticas solo se reclaman si el
+    // jugador cumple el requisito según sus estadísticas reales.
     if (task.type !== 'social') {
       const { isComplete } = getProgress(task)
       if (!isComplete) return
     }
     setClaiming(task.id)
-    const updated = await userDB.update(player.id, {
-      tokens: player.tokens + (task.token_reward || 0),
-      points: (player.points || 0) + (task.points_reward || 0),
-    })
+    await creditReward(task.token_reward, task.points_reward)
     await tasksDB.complete({ userId: player.id, taskId: task.id })
-    setPlayer(updated)
     setCompletedTaskIds(prev => [...prev, task.id])
     setClaiming(null)
   }
 
-  // Para tareas de redes sociales: abrir el enlace y permitir reclamar
+  // Tareas de redes sociales: abre el enlace y reclama (confianza manual).
   const handleSocialTask = (task) => {
     if (!player || claiming) return
-    if (task.requirement) {
-      try { window.open(task.requirement, '_blank') } catch (_) {}
+    if (task.link) {
+      try { window.open(task.link, '_blank') } catch (_) {}
     }
     claimTask(task)
   }
 
   const claimAchievement = async (ach) => {
     if (!player || claiming) return
+    if (completedAchievIds.includes(ach.id)) return
     const { isComplete } = getProgress(ach)
     if (!isComplete) return
     setClaiming(ach.id)
-    const updated = await userDB.update(player.id, {
-      tokens: player.tokens + (ach.token_reward || 0),
-      points: (player.points || 0) + (ach.points_reward || 0),
-    })
+    await creditReward(ach.token_reward, ach.points_reward)
     await achievementsDB.unlock({ userId: player.id, achievementId: ach.id })
-    setPlayer(updated)
     setCompletedAchievIds(prev => [...prev, ach.id])
     setClaiming(null)
   }
 
   const totalItems = tasks.length + achievements.length
   const completedCount = completedTaskIds.length + completedAchievIds.length
+
+  // Sistema progresivo: la tarea/logro visible de cada categoría.
+  const visibleTasks = TASK_CATEGORIES
+    .map(cat => pickCurrent(tasks.filter(t => t.type === cat), completedTaskIds))
+    .filter(Boolean)
+  const visibleAchievements = ACH_CATEGORIES
+    .map(cat => pickCurrent(achievements.filter(a => a.type === cat), completedAchievIds))
+    .filter(Boolean)
+
+  const claimedBadge = (
+    <span className="px-2.5 py-1 rounded-lg text-[10px] font-black text-green-400 shrink-0"
+      style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)' }}>
+      Reclamado
+    </span>
+  )
+  const lockedBadge = (
+    <span className="px-2.5 py-1 rounded-lg shrink-0 flex items-center justify-center"
+      style={{ border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.35)' }}>
+      <Lock size={10} />
+    </span>
+  )
 
   return (
     <div className="min-h-screen pb-24">
@@ -142,24 +182,22 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* Tasks list */}
+      {/* Tasks list (progresivo: una por categoría) */}
       {tab === 'tareas' && (
         <div className="px-4 space-y-2">
-          {tasks.length === 0 && (
-            <p className="text-center text-muted-foreground text-sm py-8">No hay tareas configuradas aún.</p>
-          )}
-          {tasks.map(task => {
-            const done = completedTaskIds.includes(task.id)
+          {visibleTasks.length === 0 ? (
+            <p className="text-center text-muted-foreground text-sm py-8">No hay tareas disponibles.</p>
+          ) : visibleTasks.map(({ item: task, allDone }) => {
             const isSocial = task.type === 'social'
-            const { current, target, isComplete } = isSocial ? { current: null, target: null, isComplete: false } : getProgress(task)
+            const { current, target, isComplete } = getProgress(task)
             return (
-              <div key={task.id} className={`bg-card rounded-xl px-3 py-3 flex items-center gap-3 ${done ? 'opacity-60' : ''}`}
-                style={{ border: '1px solid rgba(212,160,23,0.15)', background: done ? 'rgba(34,197,94,0.06)' : undefined }}>
-                <div className="text-sm w-5 text-center shrink-0">{done ? '✅' : (isSocial ? '🔗' : '🎯')}</div>
+              <div key={task.id} className={`bg-card rounded-xl px-3 py-3 flex items-center gap-3 ${allDone ? 'opacity-60' : ''}`}
+                style={{ border: '1px solid rgba(212,160,23,0.15)', background: allDone ? 'rgba(34,197,94,0.06)' : undefined }}>
+                <div className="text-sm w-5 text-center shrink-0">{allDone ? '✅' : (isSocial ? '🔗' : '🎯')}</div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground">{task.title}</p>
                   {task.description && <p className="text-[10px] text-muted-foreground">{task.description}</p>}
-                  {!isSocial && !done && current !== null && (
+                  {!isSocial && !allDone && current !== null && (
                     <p className="text-[10px] text-muted-foreground mt-0.5">
                       Progreso: <span className="text-primary font-bold">{Math.min(current, target).toLocaleString()}</span> / {target.toLocaleString()}
                     </p>
@@ -172,25 +210,20 @@ export default function Tasks() {
                     {task.points_reward > 0 && <span className="text-[10px] text-accent font-bold">+{task.points_reward} PTS</span>}
                   </div>
                 </div>
-                {!done ? (
-                  isSocial ? (
-                    <button onClick={() => handleSocialTask(task)} disabled={claiming === task.id}
-                      className="px-2.5 py-1 rounded-lg text-[10px] font-black btn-gold disabled:opacity-50 shrink-0">
-                      {claiming === task.id ? '...' : 'Ir y Reclamar'}
-                    </button>
-                  ) : isComplete ? (
-                    <button onClick={() => claimTask(task)} disabled={claiming === task.id}
-                      className="px-2.5 py-1 rounded-lg text-[10px] font-black btn-gold disabled:opacity-50 shrink-0">
-                      {claiming === task.id ? '...' : 'Reclamar'}
-                    </button>
-                  ) : (
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-black text-muted-foreground/60 shrink-0"
-                      style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <Lock size={10} className="inline" />
-                    </span>
-                  )
+                {allDone ? (
+                  claimedBadge
+                ) : isSocial ? (
+                  <button onClick={() => handleSocialTask(task)} disabled={claiming === task.id}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-black btn-gold disabled:opacity-50 shrink-0">
+                    {claiming === task.id ? '...' : 'Ir y Reclamar'}
+                  </button>
+                ) : isComplete ? (
+                  <button onClick={() => claimTask(task)} disabled={claiming === task.id}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-black btn-gold disabled:opacity-50 shrink-0">
+                    {claiming === task.id ? '...' : 'Reclamar'}
+                  </button>
                 ) : (
-                  <CheckCircle size={14} className="text-green-400 shrink-0" />
+                  lockedBadge
                 )}
               </div>
             )
@@ -198,23 +231,21 @@ export default function Tasks() {
         </div>
       )}
 
-      {/* Achievements list */}
+      {/* Achievements list (progresivo: una por categoría) */}
       {tab === 'logros' && (
         <div className="px-4 space-y-2">
-          {achievements.length === 0 && (
-            <p className="text-center text-muted-foreground text-sm py-8">No hay logros configurados aún.</p>
-          )}
-          {achievements.map(ach => {
-            const done = completedAchievIds.includes(ach.id)
+          {visibleAchievements.length === 0 ? (
+            <p className="text-center text-muted-foreground text-sm py-8">No hay logros disponibles.</p>
+          ) : visibleAchievements.map(({ item: ach, allDone }) => {
             const { current, target, isComplete } = getProgress(ach)
             return (
-              <div key={ach.id} className={`bg-card rounded-xl px-3 py-3 flex items-center gap-3 ${done ? 'opacity-60' : ''}`}
-                style={{ border: '1px solid rgba(212,160,23,0.15)', background: done ? 'rgba(34,197,94,0.06)' : undefined }}>
-                <div className="text-sm w-5 text-center shrink-0">{done ? '✅' : '🏅'}</div>
+              <div key={ach.id} className={`bg-card rounded-xl px-3 py-3 flex items-center gap-3 ${allDone ? 'opacity-60' : ''}`}
+                style={{ border: '1px solid rgba(212,160,23,0.15)', background: allDone ? 'rgba(34,197,94,0.06)' : undefined }}>
+                <div className="text-sm w-5 text-center shrink-0">{allDone ? '✅' : '🏅'}</div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground">{ach.title}</p>
                   {ach.description && <p className="text-[10px] text-muted-foreground">{ach.description}</p>}
-                  {!done && current !== null && (
+                  {!allDone && current !== null && (
                     <p className="text-[10px] text-muted-foreground mt-0.5">
                       Progreso: <span className="text-primary font-bold">{Math.min(current, target).toLocaleString()}</span> / {target.toLocaleString()}
                     </p>
@@ -227,20 +258,15 @@ export default function Tasks() {
                     {ach.points_reward > 0 && <span className="text-[10px] text-accent font-bold">+{ach.points_reward} PTS</span>}
                   </div>
                 </div>
-                {!done ? (
-                  isComplete ? (
-                    <button onClick={() => claimAchievement(ach)} disabled={claiming === ach.id}
-                      className="px-2.5 py-1 rounded-lg text-[10px] font-black btn-gold disabled:opacity-50 shrink-0">
-                      {claiming === ach.id ? '...' : 'Reclamar'}
-                    </button>
-                  ) : (
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-black text-muted-foreground/60 shrink-0"
-                      style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <Lock size={10} className="inline" />
-                    </span>
-                  )
+                {allDone ? (
+                  claimedBadge
+                ) : isComplete ? (
+                  <button onClick={() => claimAchievement(ach)} disabled={claiming === ach.id}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-black btn-gold disabled:opacity-50 shrink-0">
+                    {claiming === ach.id ? '...' : 'Reclamar'}
+                  </button>
                 ) : (
-                  <CheckCircle size={14} className="text-green-400 shrink-0" />
+                  lockedBadge
                 )}
               </div>
             )
