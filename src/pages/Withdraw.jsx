@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/telegramUser'
 import { userDB, withdrawalDB, transactionDB } from '@/lib/db'
 import { processExpressWithdrawalAds } from '@/lib/finance'
 import { showDoubleAd } from '@/lib/adsgram'
-import { ArrowLeft, Clock, Zap, CheckCircle2, AlertCircle, Loader2, Wallet, Info } from 'lucide-react'
+import { ArrowLeft, Clock, Zap, CheckCircle2, AlertCircle, Loader2, Wallet, Info, Plus, Minus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CONFIG } from '@/lib/config'
 import Avatar from '@/components/Avatar'
@@ -37,16 +37,44 @@ export default function Withdraw() {
     }
   }
 
-  const gramAmount = (amount / GRAM_RATE).toFixed(2)
   const userBalance = player?.tokens || 0
-  const hasEnoughForMin = userBalance >= MIN_TOKENS
-  const isValidAmount = amount >= MIN_TOKENS && amount <= userBalance
-  const isValidWallet = wallet.trim().length >= 10
-  const canWithdraw = player && isValidAmount && isValidWallet
+  const gramAmount = (amount > 0 ? (amount / GRAM_RATE).toFixed(2) : '0.00')
+
+  // Ajustadores de cantidad táctiles
+  const handleAddAmount = (delta) => {
+    setError(null)
+    setAmount(prev => Math.max(0, (Number(prev) || 0) + delta))
+  }
+
+  const handleMaxAmount = () => {
+    setError(null)
+    setAmount(userBalance)
+  }
+
+  // Validación inteligente al hacer clic en los botones de retiro
+  const validateAndProceed = (selectedMode) => {
+    setError(null)
+
+    if (!wallet.trim() || wallet.trim().length < 8) {
+      setError('⚠️ Por favor ingresa una dirección de Wallet GRAM válida antes de continuar.')
+      return
+    }
+
+    if (!amount || amount < MIN_TOKENS) {
+      setError(`⚠️ El monto mínimo para retirar es de ${MIN_TOKENS.toLocaleString()} Tokens (${MIN_GRAM} GRAM).`)
+      return
+    }
+
+    if (amount > userBalance) {
+      setError(`⚠️ Saldo insuficiente. Tienes ${userBalance.toLocaleString()} Tokens disponibles e intentas retirar ${amount.toLocaleString()} Tokens.`)
+      return
+    }
+
+    setMode(selectedMode)
+  }
 
   // ── RETIRO ESTÁNDAR (24-48h) ────────────────────────────
   const submitStandard = async () => {
-    if (!canWithdraw) return
     setError(null)
     setStep('processing')
 
@@ -80,7 +108,7 @@ export default function Withdraw() {
       setWithdrawals(w)
     } catch (err) {
       console.error('Error procesando retiro estándar:', err)
-      setError('Ocurrió un error al procesar la solicitud. Intenta de nuevo.')
+      setError('Ocurrió un error al procesar la solicitud. Intenta nuevamente.')
       setStep('form')
       setMode(null)
     }
@@ -88,7 +116,6 @@ export default function Withdraw() {
 
   // ── RETIRO EXPRESS (ver 2 anuncios → Inmediato) ─────────
   const submitExpress = async () => {
-    if (!canWithdraw) return
     setError(null)
     setStep('watching_ads')
 
@@ -281,17 +308,17 @@ export default function Withdraw() {
       {!mode && (
         <div className="px-4 space-y-4">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2.5 text-xs text-red-400 flex items-center gap-2">
-              <AlertCircle size={15} className="shrink-0" />
-              <span>{error}</span>
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2.5 text-xs text-red-400 flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <span className="leading-tight">{error}</span>
             </div>
           )}
 
-          {!hasEnoughForMin && (
+          {userBalance < MIN_TOKENS && !error && (
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 flex items-start gap-2.5">
               <Info size={16} className="text-yellow-400 shrink-0 mt-0.5" />
               <p className="text-[11px] text-yellow-300/90 leading-relaxed">
-                Necesitas al menos <b>{MIN_TOKENS.toLocaleString()} Tokens ({MIN_GRAM} GRAM)</b> para solicitar un retiro. ¡Sigue jugando en el casino o completando tareas para alcanzar la meta!
+                El mínimo de retiro es de <b>{MIN_TOKENS.toLocaleString()} Tokens ({MIN_GRAM} GRAM)</b>. Tu saldo actual es de <b>{userBalance.toLocaleString()} Tokens</b>.
               </p>
             </div>
           )}
@@ -302,28 +329,48 @@ export default function Withdraw() {
               <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                 Cantidad a retirar (TOKENS)
               </label>
-              <button
-                onClick={() => setAmount(Math.max(MIN_TOKENS, userBalance))}
-                disabled={!hasEnoughForMin}
-                className="text-[10px] text-primary font-black px-2 py-0.5 rounded bg-primary/10 border border-primary/20 disabled:opacity-40"
-              >
-                MÁXIMO
-              </button>
+              {/* Botones de incremento rápido y MAX */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleAddAmount(-10000)}
+                  className="text-[10px] text-muted-foreground font-bold px-2 py-0.5 rounded bg-secondary border border-border hover:text-foreground active:scale-95 transition-all"
+                >
+                  -10K
+                </button>
+                <button
+                  onClick={() => handleAddAmount(10000)}
+                  className="text-[10px] text-muted-foreground font-bold px-2 py-0.5 rounded bg-secondary border border-border hover:text-foreground active:scale-95 transition-all"
+                >
+                  +10K
+                </button>
+                <button
+                  onClick={handleMaxAmount}
+                  className="text-[10px] text-primary font-black px-2 py-0.5 rounded bg-primary/10 border border-primary/20 hover:bg-primary/20 active:scale-95 transition-all"
+                >
+                  MÁXIMO
+                </button>
+              </div>
             </div>
-            <div className="relative">
+
+            {/* Input limpio sin flechas nativas estorbosas */}
+            <div className="relative flex items-center">
               <input
                 type="number"
-                min={MIN_TOKENS}
-                step={1000}
-                value={amount}
-                onChange={e => setAmount(Number(e.target.value))}
+                value={amount || ''}
+                onChange={e => {
+                  setError(null)
+                  setAmount(Number(e.target.value))
+                }}
                 placeholder={MIN_TOKENS.toString()}
-                className="w-full bg-secondary/80 border border-border rounded-xl px-4 py-3 text-foreground text-sm font-bold focus:outline-none focus:border-primary/50"
+                className="w-full bg-secondary/80 border border-border rounded-xl px-4 py-3 text-foreground text-sm font-bold focus:outline-none focus:border-primary/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <span className="absolute right-3 top-3.5 text-xs font-black text-muted-foreground">TKN</span>
+              <span className="absolute right-3.5 text-xs font-black text-muted-foreground pointer-events-none">
+                TKN
+              </span>
             </div>
+
             <div className="flex justify-between mt-1 text-[11px]">
-              <span className="text-muted-foreground">Recibirás aproximadamente:</span>
+              <span className="text-muted-foreground">Recibirás en GRAM:</span>
               <span className="text-primary font-black text-xs">≈ {gramAmount} GRAM</span>
             </div>
           </div>
@@ -336,14 +383,17 @@ export default function Withdraw() {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Ej: UQ... o EQ..."
+                placeholder="Pega aquí tu dirección (ej: UQ... o EQ...)"
                 value={wallet}
-                onChange={e => setWallet(e.target.value)}
+                onChange={e => {
+                  setError(null)
+                  setWallet(e.target.value)
+                }}
                 className="w-full bg-secondary/80 border border-border rounded-xl px-4 py-3 text-foreground text-xs focus:outline-none focus:border-primary/50 font-mono placeholder:text-muted-foreground"
               />
             </div>
             <p className="text-[10px] text-muted-foreground/80 mt-1">
-              Pega tu dirección personal de Telegram Wallet o Tonkeeper en la red TON.
+              Dirección de tu billetera personal en la red TON (recibe tokens GRAM).
             </p>
           </div>
 
@@ -355,13 +405,8 @@ export default function Withdraw() {
             <div className="grid grid-cols-2 gap-3">
               {/* Opción Estándar */}
               <button
-                onClick={() => {
-                  if (canWithdraw) setMode('standard')
-                  else if (!hasEnoughForMin) setError(`El mínimo de retiro es de ${MIN_TOKENS.toLocaleString()} Tokens (${MIN_GRAM} GRAM).`)
-                  else if (!isValidWallet) setError('Por favor ingresa una dirección de wallet válida.')
-                }}
-                disabled={!canWithdraw}
-                className="rounded-2xl p-3.5 text-center border transition-all active:scale-95 disabled:opacity-40 flex flex-col items-center gap-1.5"
+                onClick={() => validateAndProceed('standard')}
+                className="rounded-2xl p-3.5 text-center border transition-all active:scale-95 hover:border-primary/50 flex flex-col items-center gap-1.5"
                 style={{ background: 'rgba(212,160,23,0.06)', border: '1px solid rgba(212,160,23,0.3)' }}
               >
                 <Clock size={22} className="text-primary" />
@@ -374,13 +419,8 @@ export default function Withdraw() {
 
               {/* Opción Express */}
               <button
-                onClick={() => {
-                  if (canWithdraw) setMode('express')
-                  else if (!hasEnoughForMin) setError(`El mínimo de retiro es de ${MIN_TOKENS.toLocaleString()} Tokens (${MIN_GRAM} GRAM).`)
-                  else if (!isValidWallet) setError('Por favor ingresa una dirección de wallet válida.')
-                }}
-                disabled={!canWithdraw}
-                className="rounded-2xl p-3.5 text-center border transition-all active:scale-95 disabled:opacity-40 flex flex-col items-center gap-1.5 relative overflow-hidden"
+                onClick={() => validateAndProceed('express')}
+                className="rounded-2xl p-3.5 text-center border transition-all active:scale-95 hover:border-green-500/60 flex flex-col items-center gap-1.5 relative overflow-hidden"
                 style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.4)' }}
               >
                 <div className="absolute top-1 right-2 text-[8px] font-black text-green-400 animate-pulse">FAST</div>
