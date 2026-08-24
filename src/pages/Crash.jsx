@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
 import { TrendingUp } from 'lucide-react'
 import { motion } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
@@ -71,20 +71,11 @@ export default function Crash() {
   }
 
   const saveResult = async (won, payout, at, currentPlayer) => {
-    // Procesar potenciadores activos
-    const { finalPayout, finalPoints, shieldUsed } = await boostDB.processGameBoosts({
-      userId: currentPlayer.id,
-      won,
-      betAmount,
-      basePayout: won ? payout : 0,
-      basePoints: won ? 40 : 5,
-    })
-
-    const newTokens = currentPlayer.tokens + finalPayout
+    const newTokens = currentPlayer.tokens + (won ? payout : 0)
 
     const updated = await userDB.update(currentPlayer.id, {
       tokens: newTokens,
-      points: (currentPlayer.points || 0) + finalPoints,
+      points: (currentPlayer.points || 0) + (won ? 40 : 5),
     })
     setPlayer(updated)
 
@@ -92,16 +83,16 @@ export default function Crash() {
       userId: currentPlayer.id,
       gameType: 'crash',
       betAmount,
-      result: { multiplier: at, won, shieldUsed },
-      winAmount: finalPayout,
-      profit: finalPayout - betAmount,
-      gameDetails: { cashedAt: at, shieldUsed },
+      result: { multiplier: at, won },
+      winAmount: won ? payout : 0,
+      profit: won ? payout - betAmount : -betAmount,
+      gameDetails: { cashedAt: at },
     })
 
     await statsDB.recordGame({
       userId: currentPlayer.id,
-      won: won || shieldUsed,
-      payout: finalPayout,
+      won,
+      payout,
       betAmount,
     })
   }
@@ -127,34 +118,41 @@ export default function Crash() {
         </motion.div>
       </div>
       <div className="px-3 flex-1">
-        <div className="bg-card border border-border rounded-2xl p-4 text-center">
-          <p className="text-xs text-muted-foreground mb-1">GANANCIA ACTUAL</p>
-          <p className="text-2xl font-black text-primary">
-            {phase==='running' ? `+${Math.floor(betAmount*multiplier).toLocaleString()}` : phase==='cashed' ? `+${Math.floor(betAmount*cashedAt).toLocaleString()}` : '0'} TKN
-          </p>
+        <div className="rounded-2xl overflow-hidden" style={{background:'linear-gradient(180deg,#1a6b2e,#145923)',border:'3px solid #8B6914',boxShadow:'0 0 0 2px #d4a017'}}>
+          <div className="text-center pt-3 pb-2"><span className="text-white font-black tracking-widest text-base">APUESTA</span></div>
+          <div className="px-3 pb-2">
+            <p className="text-center text-white text-[10px] font-black tracking-widest mb-2 opacity-80">TOKENS A APOSTAR</p>
+            <div className="flex items-center justify-center gap-2">
+              {[-10,-5].map(d=>(<button key={d} onClick={()=>changeBet(d)} disabled={phase==='running'}
+                  className="text-white text-xs font-bold bg-green-800/60 border border-white/20 rounded-lg px-2 py-1.5 active:scale-95 disabled:opacity-40">{d}</button>))}
+              <div className="px-4 py-1.5 rounded-lg border-2 border-white/50 bg-green-900/60 min-w-[60px] text-center">
+                <span className="text-white font-black text-sm">{betAmount}</span>
+              </div>
+              {[5,10].map(d=>(<button key={d} onClick={()=>changeBet(d)} disabled={phase==='running'}
+                  className="text-white text-xs font-bold bg-green-800/60 border border-white/20 rounded-lg px-2 py-1.5 active:scale-95 disabled:opacity-40">+{d}</button>))}
+            </div>
+          </div>
+          <div className="px-4 pb-4 pt-1">
+            {phase==='running' ? (
+              <button onClick={cashOut} className="w-full py-3.5 rounded-2xl text-white font-black text-lg tracking-widest active:scale-95"
+                style={{background:'linear-gradient(180deg,#166534,#14532d)',border:'2px solid rgba(34,197,94,0.4)'}}>
+                💰 COBRAR {multiplier.toFixed(2)}x
+              </button>
+            ) : (phase==='crashed'||phase==='cashed') ? (
+              <button onClick={reset} className="w-full py-3.5 rounded-2xl text-white font-black text-lg tracking-widest active:scale-95"
+                style={{background:'linear-gradient(180deg,#2a2a2a,#111)',border:'2px solid rgba(255,255,255,0.15)'}}>
+                NUEVA RONDA
+              </button>
+            ) : (
+              <button onClick={startRound} disabled={!player||betAmount>(player?.tokens||0)} className="w-full py-3.5 rounded-2xl text-white font-black text-lg tracking-widest active:scale-95 disabled:opacity-40"
+                style={{background:'linear-gradient(180deg,#2a2a2a,#111)',border:'2px solid rgba(255,255,255,0.15)'}}>
+                INICIAR
+              </button>
+            )}
+          </div>
         </div>
       </div>
-      <div className="px-3 pb-6 space-y-3">
-        {phase==='waiting' && (
-          <>
-            <div className="flex items-center justify-between bg-card border border-border rounded-2xl p-2">
-              <button onClick={()=>changeBet(-50)} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center font-black text-sm active:scale-95">-50</button>
-              <div className="text-center"><span className="text-[10px] text-muted-foreground block">APUESTA</span><span className="text-base font-black text-primary">{betAmount.toLocaleString()} TKN</span></div>
-              <button onClick={()=>changeBet(50)} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center font-black text-sm active:scale-95">+50</button>
-            </div>
-            <button onClick={startRound} disabled={(player?.tokens||0)<betAmount} className="w-full py-4 rounded-2xl font-black text-base btn-gold shadow-lg tracking-wider active:scale-95 transition-all">INICIAR RONDA</button>
-          </>
-        )}
-        {phase==='running' && (
-          <button onClick={cashOut} className="w-full py-5 rounded-2xl font-black text-xl text-white shadow-2xl tracking-wider active:scale-95 transition-all"
-            style={{background:'linear-gradient(135deg,#22c55e,#15803d)',boxShadow:'0 0 30px rgba(34,197,94,0.5)'}}>
-            COBRAR {(betAmount*multiplier).toFixed(0)} TKN
-          </button>
-        )}
-        {(phase==='crashed'||phase==='cashed') && (
-          <button onClick={reset} className="w-full py-4 rounded-2xl font-black text-base btn-gold shadow-lg tracking-wider active:scale-95 transition-all">OTRA PARTIDA</button>
-        )}
-      </div>
+      <div className="h-4"/>
     </div>
   )
 }
