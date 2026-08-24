@@ -269,6 +269,69 @@ export const boostDB = {
   async consume(boostId) {
     await supabase.from('user_boosts').delete().eq('id', boostId)
   },
+
+  // Procesa automáticamente los potenciadores activos en cada partida de juego
+  async processGameBoosts({ userId, won, betAmount, basePayout, basePoints }) {
+    try {
+      const activeBoosts = await boostDB.getActiveByUser(userId)
+
+      let finalPayout = basePayout
+      let finalPoints = basePoints
+      let shieldUsed = false
+      let boostBonusTokens = 0
+
+      if (activeBoosts && activeBoosts.length > 0) {
+        // 1. Escudo Anti-Pérdida (Shield) si perdió
+        if (!won && betAmount > 0) {
+          const shieldBoost = activeBoosts.find(b => b.boost_type === 'shield')
+          if (shieldBoost) {
+            finalPayout = betAmount // Reembolsa la apuesta completa
+            shieldUsed = true
+            await boostDB.consume(shieldBoost.id) // Consume el escudo (1 solo uso)
+          }
+        }
+
+        // 2. Multiplicadores de ganancia en victoria (Lucky Charm / VIP Pass)
+        if (won) {
+          const netProfit = Math.max(0, basePayout - betAmount)
+          const luckyBoost = activeBoosts.find(b => b.boost_type === 'lucky_charm')
+          const vipBoost = activeBoosts.find(b => b.boost_type === 'vip_pass')
+
+          let winBonusRate = 0
+          if (luckyBoost) winBonusRate += 0.15 // +15% extra
+          if (vipBoost) winBonusRate += 0.10 // +10% extra
+
+          if (winBonusRate > 0) {
+            boostBonusTokens = Math.floor(netProfit * winBonusRate)
+            finalPayout += boostBonusTokens
+          }
+        }
+
+        // 3. Multiplicadores de Puntos de Ranking (Double PTS / VIP Pass)
+        const hasDoublePts = activeBoosts.some(b => b.boost_type === 'double_pts' || b.boost_type === 'vip_pass')
+        if (hasDoublePts) {
+          finalPoints = finalPoints * 2
+        }
+      }
+
+      return {
+        finalPayout,
+        finalPoints,
+        shieldUsed,
+        boostBonusTokens,
+        activeBoosts,
+      }
+    } catch (err) {
+      console.warn('Error aplicando potenciadores:', err)
+      return {
+        finalPayout: basePayout,
+        finalPoints: basePoints,
+        shieldUsed: false,
+        boostBonusTokens: 0,
+        activeBoosts: [],
+      }
+    }
+  },
 }
 
 // ── REFERRALS ─────────────────────────────────────────────
