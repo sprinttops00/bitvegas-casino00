@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
 import { motion, AnimatePresence } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
 
@@ -28,19 +28,25 @@ function ReelStrip({ symbol, spinning, delay }) {
   return (
     <div className="w-16 h-20 rounded-xl overflow-hidden flex items-center justify-center relative"
       style={{background:'linear-gradient(180deg,#f5f5dc,#e8e0c8)',border:'3px solid #8B6914',boxShadow:'inset 0 2px 6px rgba(0,0,0,0.3)'}}>
-      <motion.div animate={spinning?{y:[0,-40,40,0]}:{}} transition={{duration:0.3,repeat:spinning?Infinity:0,delay}}
-        className="text-3xl select-none">
-        {symbol}
-      </motion.div>
+      {spinning ? (
+        <motion.div animate={{y:[-40,40]}} transition={{duration:0.15,repeat:Infinity,ease:'linear',delay}} className="text-3xl select-none">
+          {randomSymbol()}
+        </motion.div>
+      ) : (
+        <motion.div key={symbol} initial={{y:-30,opacity:0}} animate={{y:0,opacity:1}}
+          transition={{type:'spring',stiffness:300,damping:20,delay}} className="text-3xl select-none">
+          {symbol}
+        </motion.div>
+      )}
     </div>
   )
 }
 
 export default function Tragamonedas() {
   const [player, setPlayer] = useState(null)
-  const [reels, setReels] = useState(['🍒','💎','7️⃣'])
   const [betAmount, setBetAmount] = useState(100)
   const [spinning, setSpinning] = useState(false)
+  const [reels, setReels] = useState(['🍒','🍒','🍒'])
   const [outcome, setOutcome] = useState(null)
 
   useEffect(() => { loadPlayer() }, [])
@@ -61,23 +67,13 @@ export default function Tragamonedas() {
       let mult=PAYOUTS[combo]||0
       if (!mult && r1===r2 && r2===r3 && FRUIT_SYMBOLS.includes(r1)) mult=2
       const won=mult>0
-      const rawPayout=won?betAmount*mult:0
-
-      // Procesar potenciadores activos
-      const { finalPayout, finalPoints, shieldUsed } = await boostDB.processGameBoosts({
-        userId: player.id,
-        won,
-        betAmount,
-        basePayout: rawPayout,
-        basePoints: won ? 35 : 4,
-      })
-
-      const newTokens=player.tokens-betAmount+finalPayout
-      setOutcome({won,payout: finalPayout,mult,shieldUsed})
+      const payout=won?betAmount*mult:0
+      const newTokens=player.tokens-betAmount+payout
+      setOutcome({won,payout,mult})
 
       const updated = await userDB.update(player.id, {
         tokens: newTokens,
-        points: (player.points || 0) + finalPoints,
+        points: (player.points || 0) + (won ? 35 : 4),
       })
       setPlayer(updated)
 
@@ -86,15 +82,15 @@ export default function Tragamonedas() {
         gameType: 'slots',
         betAmount,
         result: { reels: [r1,r2,r3], combo },
-        winAmount: finalPayout,
-        profit: finalPayout - betAmount,
-        gameDetails: { multiplier: mult, shieldUsed },
+        winAmount: payout,
+        profit: payout - betAmount,
+        gameDetails: { multiplier: mult },
       })
 
       await statsDB.recordGame({
         userId: player.id,
-        won: won || shieldUsed,
-        payout: finalPayout,
+        won,
+        payout,
         betAmount,
       })
 
@@ -117,36 +113,51 @@ export default function Tragamonedas() {
             <AnimatePresence>
               {outcome&&!spinning&&(
                 <motion.div initial={{opacity:0,scale:0.8}} animate={{opacity:1,scale:1}} exit={{opacity:0}}
-                  className={`px-4 py-1 rounded-full text-sm font-bold ${outcome.won?'text-green-400':outcome.shieldUsed?'text-blue-300':'text-red-400'}`}>
-                  {outcome.won?`🎉 x${outcome.mult} · +${outcome.payout.toLocaleString()} TOKENS`:outcome.shieldUsed?`🛡️ ¡Escudo salvó tu apuesta!`: `😔 -${betAmount.toLocaleString()} TOKENS`}
+                  className={`px-4 py-1 rounded-full text-sm font-bold ${outcome.won?'text-green-400':'text-red-400'}`}>
+                  {outcome.won?`🎉 x${outcome.mult} · +${outcome.payout.toLocaleString()} TOKENS`:`😔 -${betAmount.toLocaleString()} TOKENS`}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </div>
       </div>
-      <div className="px-3 flex-1 overflow-y-auto mb-3">
-        <p className="text-[10px] text-muted-foreground font-black uppercase tracking-wider mb-2 text-center">Tabla de Pagos</p>
-        <div className="grid grid-cols-2 gap-1.5 text-xs">
-          {Object.entries(PAYOUTS).slice(0,6).map(([combo,mult])=>(
-            <div key={combo} className="flex justify-between items-center bg-card/60 border border-border/50 rounded-xl px-2.5 py-1.5">
-              <span>{combo}</span>
-              <span className="font-bold text-primary">x{mult}</span>
+      <div className="px-4 mb-2">
+        <div className="rounded-xl px-3 py-2" style={{background:'rgba(212,160,23,0.08)',border:'1px solid rgba(212,160,23,0.2)'}}>
+          <p className="text-[9px] text-primary font-black tracking-widest text-center mb-1.5">PREMIOS</p>
+          <div className="grid grid-cols-4 gap-1 text-center">
+            {Object.entries(PAYOUTS).slice(0,4).map(([k,v])=>(
+              <div key={k} className="text-[10px]">
+                <div>{k.slice(0,2)}x3</div>
+                <div className="text-primary font-bold">x{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="px-3 flex-1">
+        <div className="rounded-2xl overflow-hidden" style={{background:'linear-gradient(180deg,#1a6b2e,#145923)',border:'3px solid #8B6914',boxShadow:'0 0 0 2px #d4a017'}}>
+          <div className="px-3 py-2">
+            <p className="text-center text-white text-[10px] font-black tracking-widest mb-2 opacity-80">TOKENS A APOSTAR</p>
+            <div className="flex items-center justify-center gap-2">
+              {[-10,-5].map(d=>(<button key={d} onClick={()=>changeBet(d)} disabled={spinning}
+                  className="text-white text-xs font-bold bg-green-800/60 border border-white/20 rounded-lg px-2 py-1.5 active:scale-95 disabled:opacity-40">{d}</button>))}
+              <div className="px-4 py-1.5 rounded-lg border-2 border-white/50 bg-green-900/60 min-w-[60px] text-center">
+                <span className="text-white font-black text-sm">{betAmount}</span>
+              </div>
+              {[5,10].map(d=>(<button key={d} onClick={()=>changeBet(d)} disabled={spinning}
+                  className="text-white text-xs font-bold bg-green-800/60 border border-white/20 rounded-lg px-2 py-1.5 active:scale-95 disabled:opacity-40">+{d}</button>))}
             </div>
-          ))}
+          </div>
+          <div className="px-4 pb-4 pt-1">
+            <button onClick={spin} disabled={spinning||!player||betAmount>(player?.tokens||0)}
+              className="w-full py-3.5 rounded-2xl text-white font-black text-lg tracking-widest active:scale-95 disabled:opacity-40"
+              style={{background:spinning?'#333':'linear-gradient(180deg,#2a2a2a,#111)',border:'2px solid rgba(255,255,255,0.15)'}}>
+              {spinning?'🎰 GIRANDO...':'🎰 GIRAR'}
+            </button>
+          </div>
         </div>
       </div>
-      <div className="px-3 pb-6 space-y-3">
-        <div className="flex items-center justify-between bg-card border border-border rounded-2xl p-2">
-          <button onClick={()=>changeBet(-50)} disabled={spinning} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center font-black text-sm active:scale-95 disabled:opacity-50">-50</button>
-          <div className="text-center"><span className="text-[10px] text-muted-foreground block">APUESTA</span><span className="text-base font-black text-primary">{betAmount.toLocaleString()} TKN</span></div>
-          <button onClick={()=>changeBet(50)} disabled={spinning} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center font-black text-sm active:scale-95 disabled:opacity-50">+50</button>
-        </div>
-        <button onClick={spin} disabled={spinning||(player?.tokens||0)<betAmount}
-          className="w-full py-4 rounded-2xl font-black text-base btn-gold shadow-lg tracking-wider active:scale-95 transition-all">
-          {spinning?'GIRANDO...':'GIRAR'}
-        </button>
-      </div>
+      <div className="h-4"/>
     </div>
   )
 }
