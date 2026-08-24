@@ -13,9 +13,6 @@ export const userDB = {
       .eq('telegram_id', telegramId)
       .single()
     if (data) {
-      // Supabase puede devolver user_statistics como array [{...}] o como objeto {...}
-      // según cómo detecte la relación. Normalizamos siempre a un objeto único
-      // para que total_games_played, total_wins, best_streak, etc. se lean correctamente.
       data.user_statistics = Array.isArray(data.user_statistics)
         ? (data.user_statistics[0] || null)
         : data.user_statistics
@@ -122,12 +119,6 @@ export const statsDB = {
     return data
   },
 
-  // Registra una partida terminada y devuelve las estadísticas actualizadas.
-  //
-  // IMPORTANTE: lee SIEMPRE el estado actual desde la base de datos antes de
-  // sumar. Así evitamos el bug por el que, tras la primera partida, los datos
-  // en memoria del jugador quedaban vacíos y se sobreescribía el progreso
-  // real con valores reiniciados (todo se quedaba "trabado" en 1).
   async recordGame({ userId, won, payout = 0, betAmount = 0 }) {
     const current = (await statsDB.getByUserId(userId)) || {}
 
@@ -244,6 +235,39 @@ export const shopDB = {
       price,
       tokens_received: tokensReceived,
     })
+  },
+}
+
+// ── BOOSTS & INVENTORY ────────────────────────────────────
+export const boostDB = {
+  async getActiveByUser(userId) {
+    const now = new Date().toISOString()
+    const { data } = await supabase
+      .from('user_boosts')
+      .select('*')
+      .eq('user_id', userId)
+      .gt('expires_at', now)
+      .order('expires_at', { ascending: true })
+    return data || []
+  },
+
+  async add({ userId, boostType, multiplier = 1, durationHours = 24 }) {
+    const expiresAt = new Date(Date.now() + durationHours * 3600 * 1000).toISOString()
+    const { data } = await supabase
+      .from('user_boosts')
+      .insert({
+        user_id: userId,
+        boost_type: boostType,
+        multiplier,
+        expires_at: expiresAt,
+      })
+      .select()
+      .single()
+    return data
+  },
+
+  async consume(boostId) {
+    await supabase.from('user_boosts').delete().eq('id', boostId)
   },
 }
 
