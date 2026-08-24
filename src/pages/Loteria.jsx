@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
 import { motion, AnimatePresence } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
 
@@ -37,10 +37,10 @@ function Ball({ number, isMatch, isDrawn, size='md' }) {
 
 export default function Loteria() {
   const [player, setPlayer] = useState(null)
+  const [betAmount, setBetAmount] = useState(100)
   const [picked, setPicked] = useState([])
   const [drawn, setDrawn] = useState([])
   const [drawing, setDrawing] = useState(false)
-  const [betAmount, setBetAmount] = useState(100)
   const [outcome, setOutcome] = useState(null)
 
   useEffect(() => { loadPlayer() }, [])
@@ -51,26 +51,17 @@ export default function Loteria() {
     if (u) setPlayer(u)
   }
 
-  const toggleNumber = (n) => {
-    if (drawing) return
-    if (picked.includes(n)) setPicked(p => p.filter(x => x !== n))
-    else if (picked.length < PICK_COUNT) setPicked(p => [...p, n])
+  const togglePick = (n) => {
+    if (drawing || outcome) return
+    if (picked.includes(n)) setPicked(prev=>prev.filter(x=>x!==n))
+    else if (picked.length<PICK_COUNT) setPicked(prev=>[...prev,n])
   }
 
-  const autoPick = () => {
-    if (drawing) return
-    const all = Array.from({length:TOTAL_BALLS},(_,i)=>i+1)
-    const shuffled = all.sort(()=>Math.random()-0.5).slice(0,PICK_COUNT)
-    setPicked(shuffled)
-  }
-
-  const play = async () => {
-    if (!player || drawing || picked.length < PICK_COUNT || betAmount > player.tokens) return
+  const drawNumbers = async () => {
+    if (!player||drawing||picked.length<PICK_COUNT||betAmount>player.tokens) return
     setDrawing(true); setDrawn([]); setOutcome(null)
-
-    const all = Array.from({length:TOTAL_BALLS},(_,i)=>i+1)
-    const shuffled = all.sort(()=>Math.random()-0.5).slice(0,DRAW_COUNT)
-
+    const pool=Array.from({length:TOTAL_BALLS},(_,i)=>i+1)
+    const shuffled=pool.sort(()=>Math.random()-0.5).slice(0,DRAW_COUNT)
     for (let i=0;i<shuffled.length;i++) {
       await new Promise(r=>setTimeout(r,400))
       setDrawn(prev=>[...prev,shuffled[i]])
@@ -79,24 +70,13 @@ export default function Loteria() {
     const matches=picked.filter(n=>shuffled.includes(n)).length
     const prize=PRIZE_TABLE.find(p=>p.matches===matches)
     const won=!!prize
-    const rawPayout=won?betAmount*prize.mult:0
-
-    // Procesar potenciadores activos
-    const { finalPayout, finalPoints, shieldUsed } = await boostDB.processGameBoosts({
-      userId: player.id,
-      won,
-      betAmount,
-      basePayout: rawPayout,
-      basePoints: won ? 45 : 5,
-    })
-
-    const newTokens=player.tokens-betAmount+finalPayout
-    setOutcome({won,payout: finalPayout,matches,drawn:shuffled,shieldUsed})
+    const payout=won?betAmount*prize.mult:0
+    const newTokens=player.tokens-betAmount+payout
+    setOutcome({won,payout,matches,drawn:shuffled})
     setDrawing(false)
-
     const updated = await userDB.update(player.id, {
       tokens: newTokens,
-      points: (player.points || 0) + finalPoints,
+      points: (player.points || 0) + (won ? 45 : 5),
     })
     setPlayer(updated)
 
@@ -105,15 +85,15 @@ export default function Loteria() {
       gameType: 'lottery',
       betAmount,
       result: { matches, drawn: shuffled, picked },
-      winAmount: finalPayout,
-      profit: finalPayout - betAmount,
-      gameDetails: { prize: prize?.label, shieldUsed },
+      winAmount: payout,
+      profit: payout - betAmount,
+      gameDetails: { prize: prize?.label },
     })
 
     await statsDB.recordGame({
       userId: player.id,
-      won: won || shieldUsed,
-      payout: finalPayout,
+      won,
+      payout,
       betAmount,
     })
   }
@@ -138,50 +118,57 @@ export default function Loteria() {
         <AnimatePresence>
           {outcome&&!drawing&&(
             <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} exit={{opacity:0}}
-              className={`px-4 py-1 rounded-full text-xs font-black ${outcome.won?'bg-green-500/20 text-green-400 border border-green-500/30':outcome.shieldUsed?'bg-blue-500/20 text-blue-300 border border-blue-500/30':'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
-              {outcome.won?`🎉 ¡${outcome.matches} ACIERTOS! +${outcome.payout.toLocaleString()} TOKENS`:outcome.shieldUsed?`🛡️ ¡Escudo activado! Apuesta protegida.`:`${outcome.matches} aciertos · -${betAmount.toLocaleString()} TOKENS`}
+              className={`px-6 py-1 rounded-full text-sm font-bold ${outcome.won?'bg-green-500/20 text-green-400 border border-green-500/40':'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
+              {outcome.won?`🎉 ${outcome.matches} aciertos · +${outcome.payout.toLocaleString()} TOKENS`:`😔 Solo ${outcome.matches} aciertos`}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-      <div className="px-3 flex-1 flex flex-col justify-end mb-3">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-[10px] text-muted-foreground font-bold">{picked.length}/{PICK_COUNT} SELECCIONADOS</span>
-          <div className="flex gap-2">
-            <button onClick={autoPick} disabled={drawing} className="text-[10px] font-black text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-lg active:scale-95">AL AZAR</button>
-            <button onClick={reset} disabled={drawing} className="text-[10px] text-muted-foreground bg-secondary px-2 py-0.5 rounded-lg active:scale-95">LIMPIAR</button>
+      <div className="px-3 flex-1">
+        <div className="rounded-2xl overflow-hidden" style={{background:'linear-gradient(180deg,#1a6b2e,#145923)',border:'3px solid #8B6914',boxShadow:'0 0 0 2px #d4a017'}}>
+          <div className="px-3 pt-3 pb-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-white font-black text-xs tracking-widest">TUS NÚMEROS ({picked.length}/{PICK_COUNT})</span>
+              {outcome&&<button onClick={reset} className="text-[10px] text-primary font-bold underline">Nueva partida</button>}
+            </div>
+            <div className="grid grid-cols-10 gap-1">
+              {Array.from({length:TOTAL_BALLS},(_,i)=>i+1).map(n=>{
+                const isPicked=picked.includes(n)
+                const isMatch=outcome&&isPicked&&drawn.includes(n)
+                return (
+                  <button key={n} onClick={()=>togglePick(n)} disabled={drawing||(picked.length>=PICK_COUNT&&!isPicked)}
+                    className={`w-6 h-6 rounded-md text-[10px] font-black transition-all active:scale-90 ${isMatch?'ring-2 ring-yellow-400':isPicked?'ring-1 ring-primary/60':''}`}
+                    style={{
+                      background:isMatch?'radial-gradient(circle,#fde68a,#d4a017)':isPicked?'rgba(212,160,23,0.35)':'rgba(0,0,0,0.3)',
+                      border:isPicked?'1px solid rgba(212,160,23,0.6)':'1px solid rgba(255,255,255,0.15)',
+                      color:isPicked?'#f6d365':'rgba(255,255,255,0.7)',
+                    }}>{n}</button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="px-3 pb-2">
+            <p className="text-center text-white text-[10px] font-black tracking-widest mb-2 opacity-80">TOKENS A APOSTAR</p>
+            <div className="flex items-center justify-center gap-2">
+              {[-10,-5].map(d=>(<button key={d} onClick={()=>changeBet(d)} disabled={drawing}
+                  className="text-white text-xs font-bold bg-green-800/60 border border-white/20 rounded-lg px-2 py-1.5 active:scale-95 disabled:opacity-40">{d}</button>))}
+              <div className="px-4 py-1.5 rounded-lg border-2 border-white/50 bg-green-900/60 min-w-[60px] text-center">
+                <span className="text-white font-black text-sm">{betAmount}</span>
+              </div>
+              {[5,10].map(d=>(<button key={d} onClick={()=>changeBet(d)} disabled={drawing}
+                  className="text-white text-xs font-bold bg-green-800/60 border border-white/20 rounded-lg px-2 py-1.5 active:scale-95 disabled:opacity-40">+{d}</button>))}
+            </div>
+          </div>
+          <div className="px-4 pb-4 pt-1">
+            <button onClick={drawNumbers} disabled={drawing||picked.length<PICK_COUNT||!player||betAmount>(player?.tokens||0)}
+              className="w-full py-3.5 rounded-2xl text-white font-black text-lg tracking-widest active:scale-95 disabled:opacity-40"
+              style={{background:drawing?'#333':'linear-gradient(180deg,#2a2a2a,#111)',border:'2px solid rgba(255,255,255,0.15)'}}>
+              {drawing?'🎱 SORTEANDO...':picked.length<PICK_COUNT?`ELIGE ${PICK_COUNT-picked.length} MÁS`:'SORTEAR'}
+            </button>
           </div>
         </div>
-        <div className="grid grid-cols-6 gap-1.5">
-          {Array.from({length:TOTAL_BALLS},(_,i)=>i+1).map(n=>{
-            const isPicked=picked.includes(n)
-            const isDrawn=drawn.includes(n)
-            const isMatch=isPicked&&isDrawn
-            return (
-              <button key={n} onClick={()=>toggleNumber(n)} disabled={drawing}
-                className={`h-9 rounded-xl font-black text-xs border transition-all active:scale-95 ${
-                  isMatch?'bg-primary text-primary-foreground border-yellow-300 shadow-md':
-                  isPicked?'bg-yellow-500/30 text-yellow-300 border-yellow-500/60':
-                  isDrawn?'bg-blue-500/20 text-blue-300 border-blue-500/40':
-                  'bg-secondary/60 text-muted-foreground border-border'
-                }`}>
-                {n}
-              </button>
-            )
-          })}
-        </div>
       </div>
-      <div className="px-3 pb-6 space-y-3">
-        <div className="flex items-center justify-between bg-card border border-border rounded-2xl p-2">
-          <button onClick={()=>changeBet(-50)} disabled={drawing} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center font-black text-sm active:scale-95 disabled:opacity-50">-50</button>
-          <div className="text-center"><span className="text-[10px] text-muted-foreground block">APUESTA</span><span className="text-base font-black text-primary">{betAmount.toLocaleString()} TKN</span></div>
-          <button onClick={()=>changeBet(50)} disabled={drawing} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center font-black text-sm active:scale-95 disabled:opacity-50">+50</button>
-        </div>
-        <button onClick={play} disabled={drawing||picked.length<PICK_COUNT||(player?.tokens||0)<betAmount}
-          className="w-full py-4 rounded-2xl font-black text-base btn-gold shadow-lg tracking-wider active:scale-95 transition-all disabled:opacity-40">
-          {drawing?'SORTEANDO...':picked.length<PICK_COUNT?`ELIGE ${PICK_COUNT-picked.length} NÚMEROS MÁS`:'JUGAR LOTERÍA'}
-        </button>
-      </div>
+      <div className="h-4"/>
     </div>
   )
 }
