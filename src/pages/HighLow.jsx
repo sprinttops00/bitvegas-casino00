@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
@@ -35,8 +35,8 @@ export default function HighLow() {
 
   const guess = async (choice) => {
     if (!player || guessing || betAmount > player.tokens) return
-    setGuessing(true)
-    setOutcome(null)
+    setGuessing(true); setOutcome(null)
+
     const next = getRandomNumber()
     setNextNumber(next)
     await new Promise(r => setTimeout(r, 600))
@@ -50,15 +50,25 @@ export default function HighLow() {
     const newStreak = won ? streak + 1 : 0
     const streakBonus = won && newStreak >= 3 ? Math.floor(betAmount * 0.5) : 0
     const basePayout = won ? (choice === 'equal' ? betAmount * 7 : Math.floor(betAmount * 2)) : 0
-    const totalPayout = basePayout + streakBonus
-    const newTokens = player.tokens - betAmount + totalPayout
+    const rawPayout = basePayout + streakBonus
+
+    // Procesar potenciadores activos
+    const { finalPayout, finalPoints, shieldUsed } = await boostDB.processGameBoosts({
+      userId: player.id,
+      won,
+      betAmount,
+      basePayout: rawPayout,
+      basePoints: won ? 25 : 3,
+    })
+
+    const newTokens = player.tokens - betAmount + finalPayout
 
     setStreak(newStreak)
-    setOutcome({ won, payout: totalPayout, next: displayNext, choice, streakBonus })
+    setOutcome({ won, payout: finalPayout, next: displayNext, choice, streakBonus, shieldUsed })
 
     const updated = await userDB.update(player.id, {
       tokens: newTokens,
-      points: (player.points || 0) + (won ? 25 : 3),
+      points: (player.points || 0) + finalPoints,
     })
     setPlayer(updated)
 
@@ -67,15 +77,15 @@ export default function HighLow() {
       gameType: 'highlow',
       betAmount,
       result: { next: displayNext, choice },
-      winAmount: totalPayout,
-      profit: totalPayout - betAmount,
-      gameDetails: { choice, streakBonus },
+      winAmount: finalPayout,
+      profit: finalPayout - betAmount,
+      gameDetails: { choice, streakBonus, shieldUsed },
     })
 
     await statsDB.recordGame({
       userId: player.id,
-      won,
-      payout: totalPayout,
+      won: won || shieldUsed,
+      payout: finalPayout,
       betAmount,
     })
 
@@ -108,65 +118,53 @@ export default function HighLow() {
         <AnimatePresence>
           {outcome && !guessing && (
             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className={`px-6 py-1 rounded-full text-sm font-bold ${outcome.won ? 'bg-green-500/20 text-green-400 border border-green-500/40' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
-              {outcome.won ? `🎉 +${outcome.payout.toLocaleString()} TOKENS` : `😔 -${betAmount.toLocaleString()} TOKENS`}
-              {outcome.streakBonus > 0 && ` (+${outcome.streakBonus} racha)`}
+              className={`px-4 py-1 rounded-full text-xs font-black ${outcome.won ? 'bg-green-500/20 text-green-400 border border-green-500/30' : outcome.shieldUsed ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+              {outcome.won
+                ? `¡CORRECTO! +${outcome.payout.toLocaleString()} TKN${outcome.streakBonus > 0 ? ' (Bono racha!)' : ''}`
+                : outcome.shieldUsed ? `🛡️ ¡Escudo activado! Apuesta protegida.` : `INCORRECTO · -${betAmount.toLocaleString()} TKN`}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-      <div className="px-3 flex-1">
-        <div className="rounded-2xl overflow-hidden" style={{
-          background: 'linear-gradient(180deg, #1a6b2e 0%, #145923 100%)',
-          border: '3px solid #8B6914', boxShadow: '0 0 0 2px #d4a017',
-        }}>
-          <div className="text-center pt-3 pb-2"><span className="text-white font-black tracking-widest text-base">APUESTA</span></div>
-          <div className="px-3 mb-3">
-            <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
-              {[{l:'MAYOR',c:'text-green-300',v:'x2'},{l:'IGUAL',c:'text-yellow-300',v:'x7'},{l:'MENOR',c:'text-blue-300',v:'x2'}].map(({l,c,v})=>(
-                <div key={l} className="bg-green-800/60 rounded-xl p-2 border border-white/10">
-                  <p className={`font-black ${c}`}>{l}</p>
-                  <p className="text-white/60 text-[10px]">{v}</p>
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button onClick={() => guess('higher')} disabled={guessing || !player || betAmount>(player?.tokens||0)}
-                className="flex flex-col items-center gap-1 py-3 rounded-xl text-white font-black text-xs active:scale-95 transition-all disabled:opacity-40 border"
-                style={{ background:'rgba(34,197,94,0.2)', borderColor:'rgba(34,197,94,0.4)' }}>
-                <TrendingUp size={20} className="text-green-400" /><span className="text-green-300">MAYOR</span>
-              </button>
-              <button onClick={() => guess('equal')} disabled={guessing || !player || betAmount>(player?.tokens||0)}
-                className="flex flex-col items-center gap-1 py-3 rounded-xl text-white font-black text-xs active:scale-95 transition-all disabled:opacity-40 border"
-                style={{ background:'rgba(212,160,23,0.2)', borderColor:'rgba(212,160,23,0.4)' }}>
-                <Minus size={20} className="text-yellow-400" /><span className="text-yellow-300">IGUAL</span>
-              </button>
-              <button onClick={() => guess('lower')} disabled={guessing || !player || betAmount>(player?.tokens||0)}
-                className="flex flex-col items-center gap-1 py-3 rounded-xl text-white font-black text-xs active:scale-95 transition-all disabled:opacity-40 border"
-                style={{ background:'rgba(96,165,250,0.2)', borderColor:'rgba(96,165,250,0.4)' }}>
-                <TrendingDown size={20} className="text-blue-400" /><span className="text-blue-300">MENOR</span>
-              </button>
-            </div>
-          </div>
-          <div className="px-3 pb-2">
-            <p className="text-center text-white text-[10px] font-black tracking-widest mb-2 opacity-80">TOKENS A APOSTAR</p>
-            <div className="flex items-center justify-center gap-2">
-              {[-10,-5].map(d=>(
-                <button key={d} onClick={()=>changeBet(d)} disabled={guessing}
-                  className="text-white text-xs font-bold bg-green-800/60 border border-white/20 rounded-lg px-2 py-1.5 active:scale-95 disabled:opacity-40">{d}</button>
-              ))}
-              <div className="px-4 py-1.5 rounded-lg border-2 border-white/50 bg-green-900/60 min-w-[60px] text-center">
-                <span className="text-white font-black text-sm">{betAmount}</span>
-              </div>
-              {[5,10].map(d=>(
-                <button key={d} onClick={()=>changeBet(d)} disabled={guessing}
-                  className="text-white text-xs font-bold bg-green-800/60 border border-white/20 rounded-lg px-2 py-1.5 active:scale-95 disabled:opacity-40">+{d}</button>
-              ))}
-            </div>
-          </div>
+      {streak >= 2 && (
+        <div className="text-center mb-2">
+          <span className="text-xs font-black text-accent bg-accent/10 border border-accent/20 px-3 py-1 rounded-full animate-pulse">
+            🔥 Racha: {streak} seguidas
+          </span>
+        </div>
+      )}
+      <div className="px-3 flex-1 flex flex-col justify-end mb-3">
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={() => guess('higher')} disabled={guessing}
+            className="py-4 rounded-2xl bg-secondary/80 border border-border hover:border-primary/50 text-foreground flex flex-col items-center gap-1 active:scale-95 transition-all">
+            <TrendingUp size={22} className="text-green-400" />
+            <span className="font-black text-xs">MAYOR</span>
+            <span className="text-[10px] text-muted-foreground">x2</span>
+          </button>
+          <button onClick={() => guess('equal')} disabled={guessing}
+            className="py-4 rounded-2xl bg-secondary/80 border border-border hover:border-primary/50 text-foreground flex flex-col items-center gap-1 active:scale-95 transition-all">
+            <Minus size={22} className="text-primary" />
+            <span className="font-black text-xs">IGUAL</span>
+            <span className="text-[10px] text-primary font-bold">x7</span>
+          </button>
+          <button onClick={() => guess('lower')} disabled={guessing}
+            className="py-4 rounded-2xl bg-secondary/80 border border-border hover:border-primary/50 text-foreground flex flex-col items-center gap-1 active:scale-95 transition-all">
+            <TrendingDown size={22} className="text-red-400" />
+            <span className="font-black text-xs">MENOR</span>
+            <span className="text-[10px] text-muted-foreground">x2</span>
+          </button>
         </div>
       </div>
-      <div className="h-4" />
+      <div className="px-3 pb-6 space-y-3">
+        <div className="flex items-center justify-between bg-card border border-border rounded-2xl p-2">
+          <button onClick={() => changeBet(-50)} disabled={guessing} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center font-black text-sm active:scale-95 disabled:opacity-50">-50</button>
+          <div className="text-center">
+            <span className="text-[10px] text-muted-foreground block">APUESTA</span>
+            <span className="text-base font-black text-primary">{betAmount.toLocaleString()} TKN</span>
+          </div>
+          <button onClick={() => changeBet(50)} disabled={guessing} className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center font-black text-sm active:scale-95 disabled:opacity-50">+50</button>
+        </div>
+      </div>
     </div>
   )
 }
