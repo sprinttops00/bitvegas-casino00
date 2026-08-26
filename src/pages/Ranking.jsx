@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB } from '@/lib/db'
-import { Crown, Medal, ArrowLeft } from 'lucide-react'
+import { userDB, jackpotDB } from '@/lib/db'
+import { Crown, Medal, ArrowLeft, Coins } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Avatar from '@/components/Avatar'
 
@@ -9,18 +9,22 @@ export default function Ranking() {
   const [players, setPlayers] = useState([])
   const [me, setMe] = useState(null)
   const [myRank, setMyRank] = useState(null)
+  const [jackpot, setJackpot] = useState(0)
 
   useEffect(() => { loadData() }, [])
 
   const loadData = async () => {
     const tgUser = getCurrentUser()
-    const all = await userDB.listAll('points', 50)
+    // Ordenado por puntos SEMANALES: la competencia se reinicia cada domingo.
+    const all = await userDB.listAll('weekly_points', 50)
     setPlayers(all)
     const myP = all.find(p => p.telegram_id === tgUser.telegram_id)
     if (myP) {
       setMe(myP)
       setMyRank(all.findIndex(p => p.telegram_id === tgUser.telegram_id) + 1)
     }
+    const currentJackpot = await jackpotDB.getCurrent()
+    setJackpot(currentJackpot)
   }
 
   const getRankIcon = (rank) => {
@@ -37,11 +41,30 @@ export default function Ranking() {
     return 'bg-card border-border/50'
   }
 
+  const JACKPOT_SPLITS = [0.60, 0.25, 0.15]
+
   return (
     <div className="min-h-screen pb-24">
       <div className="flex items-center gap-3 px-4 pt-5 pb-3">
         <Link to="/" className="w-9 h-9 rounded-xl bg-secondary/60 border border-border flex items-center justify-center shrink-0"><ArrowLeft size={18}/></Link>
-        <h1 className="text-xl font-black text-foreground">Ranking Global</h1>
+        <h1 className="text-xl font-black text-foreground">Ranking Semanal</h1>
+      </div>
+
+      {/* Jackpot acumulado de la semana */}
+      <div className="px-4 mb-4">
+        <div className="rounded-2xl p-4 text-center" style={{
+          background: 'linear-gradient(180deg, rgba(212,160,23,0.15), rgba(212,160,23,0.05))',
+          border: '1px solid rgba(212,160,23,0.35)',
+        }}>
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <Coins size={16} className="text-primary" />
+            <p className="text-[10px] text-primary font-black tracking-widest">JACKPOT DE ESTA SEMANA</p>
+          </div>
+          <p className="text-2xl font-black text-primary">{jackpot.toLocaleString()} TOKENS</p>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Se reparte cada domingo 8:00 PM · 🥇 60% · 🥈 25% · 🥉 15%
+          </p>
+        </div>
       </div>
 
       {myRank && (
@@ -53,8 +76,8 @@ export default function Ranking() {
               <p className="text-sm font-bold text-foreground">#{myRank} · {me?.username || me?.first_name}</p>
             </div>
             <div className="ml-auto text-right">
-              <p className="text-xs text-muted-foreground">Puntos</p>
-              <p className="text-sm font-bold text-primary">{(me?.points || 0).toLocaleString()} PTS</p>
+              <p className="text-xs text-muted-foreground">Puntos (semana)</p>
+              <p className="text-sm font-bold text-primary">{(me?.weekly_points || 0).toLocaleString()} PTS</p>
             </div>
           </div>
         </div>
@@ -64,6 +87,7 @@ export default function Ranking() {
         {players.map((p, index) => {
           const rank = index + 1
           const isMe = p.telegram_id === me?.telegram_id
+          const potentialWin = rank <= 3 ? Math.floor(jackpot * JACKPOT_SPLITS[rank - 1]) : null
           return (
             <div key={p.id} className={`rounded-xl px-3 py-3 flex items-center gap-3 border transition-all ${getRankBg(rank)} ${isMe ? 'ring-1 ring-primary/40' : ''}`}>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-card/50">{getRankIcon(rank)}</div>
@@ -74,10 +98,12 @@ export default function Ranking() {
                 <p className="text-sm font-semibold text-foreground truncate">
                   {p.username || p.first_name} {isMe && <span className="text-[10px] text-primary">(tú)</span>}
                 </p>
-                <p className="text-[10px] text-muted-foreground">{p.tokens?.toLocaleString()} tokens</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {potentialWin !== null ? `🏆 Ganaría ${potentialWin.toLocaleString()} tokens` : `${p.tokens?.toLocaleString()} tokens`}
+                </p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-bold text-primary">{(p.points || 0).toLocaleString()}</p>
+                <p className="text-sm font-bold text-primary">{(p.weekly_points || 0).toLocaleString()}</p>
                 <p className="text-[10px] text-muted-foreground">PUNTOS</p>
               </div>
             </div>
