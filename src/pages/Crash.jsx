@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { getBoostNotifications } from '@/lib/boostNotify'
 import { TrendingUp } from 'lucide-react'
 import { motion } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
+import BoostAlert from '@/components/BoostAlert'
 
 const INFO = [
   '🚀 El multiplicador empieza en x1.00 y sube con el tiempo.',
@@ -19,6 +21,7 @@ export default function Crash() {
   const [multiplier, setMultiplier] = useState(1.00)
   const [cashedAt, setCashedAt] = useState(null)
   const [crashPoint, setCrashPoint] = useState(null)
+  const [boostQueue, setBoostQueue] = useState([])
   const intervalRef = useRef(null)
   const crashRef = useRef(null)
 
@@ -46,6 +49,7 @@ export default function Crash() {
     const cp = generateCrashPoint()
     crashRef.current = cp
     setCrashPoint(null); setCashedAt(null); setMultiplier(1.00); setPhase('running')
+    // La apuesta ya se descuenta de inmediato al iniciar la ronda (comportamiento original de este juego).
     const updated = await userDB.update(player.id, { tokens: player.tokens - betAmount })
     setPlayer(updated)
     let current = 1.00
@@ -71,29 +75,46 @@ export default function Crash() {
   }
 
   const saveResult = async (won, payout, at, currentPlayer) => {
-    const newTokens = currentPlayer.tokens + (won ? payout : 0)
+    const basePoints = won ? 40 : 5
+
+    // Aplicamos los potenciadores activos del inventario.
+    // Nota: en Crash la apuesta ya fue descontada al iniciar la ronda, así que aquí
+    // "afterBet" es el saldo actual (currentPlayer.tokens), y solo sumamos lo que corresponda.
+    const boostResult = await boostDB.processGameBoosts({
+      userId: currentPlayer.id,
+      won,
+      betAmount,
+      basePayout: payout,
+      basePoints,
+    })
+
+    const newTokens = currentPlayer.tokens + boostResult.finalPayout
 
     const updated = await userDB.update(currentPlayer.id, {
       tokens: newTokens,
-      points: (currentPlayer.points || 0) + (won ? 40 : 5),
+      points: (currentPlayer.points || 0) + boostResult.finalPoints,
     })
     setPlayer(updated)
+
+    // Mostramos el aviso de potenciador si aplicó alguno.
+    const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
+    if (notifications.length > 0) setBoostQueue(notifications)
 
     await gameHistoryDB.create({
       userId: currentPlayer.id,
       gameType: 'crash',
       betAmount,
       result: { multiplier: at, won },
-      winAmount: won ? payout : 0,
-      profit: won ? payout - betAmount : -betAmount,
-      gameDetails: { cashedAt: at },
+      winAmount: won ? boostResult.finalPayout : (boostResult.shieldUsed ? betAmount : 0),
+      profit: won ? boostResult.finalPayout - betAmount : (boostResult.shieldUsed ? 0 : -betAmount),
+      gameDetails: { cashedAt: at, boostApplied: boostResult.shieldUsed || boostResult.boostBonusTokens > 0 },
     })
 
     await statsDB.recordGame({
       userId: currentPlayer.id,
       won,
       payout,
-      betAmount,
+      betAmount: boostResult.shieldUsed ? 0 : betAmount,
     })
   }
 
@@ -104,6 +125,10 @@ export default function Crash() {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg,#1a0e05,#0d0704)' }}>
       <GameHeader title="CRASH" balance={player?.tokens} infoTitle="Cómo jugar Crash" infoContent={INFO} />
+      <BoostAlert
+        notification={boostQueue[0] || null}
+        onClose={() => setBoostQueue(prev => prev.slice(1))}
+      />
       <div className="flex justify-center items-center py-6">
         <motion.div animate={phase==='crashed'?{scale:[1,1.1,0.95,1]}:{}}
           className="w-48 h-48 rounded-full flex flex-col items-center justify-center"
