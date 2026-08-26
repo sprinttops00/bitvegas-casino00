@@ -334,6 +334,21 @@ export const boostDB = {
   },
 }
 
+// ── JACKPOT SEMANAL DEL RANKING ──────────────────────────────
+export const jackpotDB = {
+  async getCurrent() {
+    const { data } = await supabase.from('casino_jackpot').select('amount').eq('id', 1).single()
+    return data?.amount || 0
+  },
+
+  // Suma tokens perdidos al jackpot (llamar solo cuando el jugador pierde de verdad,
+  // es decir, cuando NO se activó un escudo anti-pérdida).
+  async addToPot(amount) {
+    if (!amount || amount <= 0) return
+    await supabase.rpc('increment_jackpot', { amount_to_add: amount })
+  },
+}
+
 // ── REFERRALS ─────────────────────────────────────────────
 export const referralDB = {
   async getByReferrer(referrerId) {
