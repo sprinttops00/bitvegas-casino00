@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { getBoostNotifications } from '@/lib/boostNotify'
 import { motion, AnimatePresence } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
+import BoostAlert from '@/components/BoostAlert'
 
 const BET_OPTIONS = [
   { id: 'low', label: '2–6', desc: 'Bajo', payout: 2 },
@@ -58,6 +60,7 @@ export default function Dados() {
   const [rolling, setRolling] = useState(false)
   const [dice, setDice] = useState([1,1])
   const [outcome, setOutcome] = useState(null)
+  const [boostQueue, setBoostQueue] = useState([])
 
   useEffect(() => { loadPlayer() }, [])
 
@@ -70,37 +73,61 @@ export default function Dados() {
   const roll = async () => {
     if (!player || rolling || betAmount > player.tokens) return
     setRolling(true); setOutcome(null)
+    const currentPlayer = player
     const d1=Math.floor(Math.random()*6)+1, d2=Math.floor(Math.random()*6)+1
+
+    // 1. Descontamos la apuesta del saldo de inmediato, antes de la animación.
+    const afterBet = currentPlayer.tokens - betAmount
+    const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
+    setPlayer(deducted)
+
     setTimeout(async () => {
       setDice([d1,d2])
       const sum=d1+d2
       const bet=BET_OPTIONS.find(b=>b.id===selectedBet)
       const won=checkWin(selectedBet,sum)
-      const payout=won?Math.floor(betAmount*bet.payout):0
-      const newTokens=player.tokens-betAmount+payout
-      setOutcome({won,payout,sum})
+      const basePayout=won?Math.floor(betAmount*bet.payout):0
+      const basePoints = won ? 30 : 3
 
-      const updated = await userDB.update(player.id, {
-        tokens: newTokens,
-        points: (player.points || 0) + (won ? 30 : 3),
+      // 2. Aplicamos los potenciadores activos del inventario.
+      const boostResult = await boostDB.processGameBoosts({
+        userId: currentPlayer.id,
+        won,
+        betAmount,
+        basePayout,
+        basePoints,
+      })
+
+      // 3. Acreditamos el resultado final (ganancia, o reembolso si el escudo se activó).
+      const finalTokens = afterBet + boostResult.finalPayout
+
+      setOutcome({won,payout:basePayout,sum})
+
+      const updated = await userDB.update(currentPlayer.id, {
+        tokens: finalTokens,
+        points: (currentPlayer.points || 0) + boostResult.finalPoints,
       })
       setPlayer(updated)
 
+      // 4. Mostramos el aviso de potenciador si aplicó alguno.
+      const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
+      if (notifications.length > 0) setBoostQueue(notifications)
+
       await gameHistoryDB.create({
-        userId: player.id,
+        userId: currentPlayer.id,
         gameType: 'dados',
         betAmount,
         result: { dice: [d1,d2], sum },
-        winAmount: payout,
-        profit: payout - betAmount,
-        gameDetails: { betType: selectedBet },
+        winAmount: won ? boostResult.finalPayout : (boostResult.shieldUsed ? betAmount : 0),
+        profit: boostResult.finalPayout - betAmount,
+        gameDetails: { betType: selectedBet, boostApplied: boostResult.shieldUsed || boostResult.boostBonusTokens > 0 },
       })
 
       await statsDB.recordGame({
-        userId: player.id,
+        userId: currentPlayer.id,
         won,
-        payout,
-        betAmount,
+        payout: basePayout,
+        betAmount: boostResult.shieldUsed ? 0 : betAmount,
       })
 
       setRolling(false)
@@ -112,6 +139,10 @@ export default function Dados() {
   return (
     <div className="min-h-screen flex flex-col" style={{background:'linear-gradient(180deg,#1a0e05,#0d0704)'}}>
       <GameHeader title="DADOS" balance={player?.tokens} infoTitle="Cómo jugar Dados" infoContent={INFO} />
+      <BoostAlert
+        notification={boostQueue[0] || null}
+        onClose={() => setBoostQueue(prev => prev.slice(1))}
+      />
       <div className="flex justify-center items-center gap-6 py-4">
         <Die value={dice[0]} rolling={rolling} />
         <div className="text-2xl font-black text-primary/60">+</div>
