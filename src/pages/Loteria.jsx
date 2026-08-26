@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { getBoostNotifications } from '@/lib/boostNotify'
 import { motion, AnimatePresence } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
+import BoostAlert from '@/components/BoostAlert'
 
 const TOTAL_BALLS = 30
 const PICK_COUNT = 5
@@ -42,6 +44,7 @@ export default function Loteria() {
   const [drawn, setDrawn] = useState([])
   const [drawing, setDrawing] = useState(false)
   const [outcome, setOutcome] = useState(null)
+  const [boostQueue, setBoostQueue] = useState([])
 
   useEffect(() => { loadPlayer() }, [])
 
@@ -60,6 +63,13 @@ export default function Loteria() {
   const drawNumbers = async () => {
     if (!player||drawing||picked.length<PICK_COUNT||betAmount>player.tokens) return
     setDrawing(true); setDrawn([]); setOutcome(null)
+    const currentPlayer = player
+
+    // 1. Descontamos la apuesta del saldo de inmediato, antes de que empiece el sorteo.
+    const afterBet = currentPlayer.tokens - betAmount
+    const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
+    setPlayer(deducted)
+
     const pool=Array.from({length:TOTAL_BALLS},(_,i)=>i+1)
     const shuffled=pool.sort(()=>Math.random()-0.5).slice(0,DRAW_COUNT)
     for (let i=0;i<shuffled.length;i++) {
@@ -70,31 +80,49 @@ export default function Loteria() {
     const matches=picked.filter(n=>shuffled.includes(n)).length
     const prize=PRIZE_TABLE.find(p=>p.matches===matches)
     const won=!!prize
-    const payout=won?betAmount*prize.mult:0
-    const newTokens=player.tokens-betAmount+payout
-    setOutcome({won,payout,matches,drawn:shuffled})
+    const basePayout=won?betAmount*prize.mult:0
+    const basePoints = won ? 45 : 5
+
+    // 2. Aplicamos los potenciadores activos del inventario.
+    const boostResult = await boostDB.processGameBoosts({
+      userId: currentPlayer.id,
+      won,
+      betAmount,
+      basePayout,
+      basePoints,
+    })
+
+    // 3. Acreditamos el resultado final (ganancia, o reembolso si el escudo se activó).
+    const finalTokens = afterBet + boostResult.finalPayout
+
+    setOutcome({won,payout:basePayout,matches,drawn:shuffled})
     setDrawing(false)
-    const updated = await userDB.update(player.id, {
-      tokens: newTokens,
-      points: (player.points || 0) + (won ? 45 : 5),
+
+    const updated = await userDB.update(currentPlayer.id, {
+      tokens: finalTokens,
+      points: (currentPlayer.points || 0) + boostResult.finalPoints,
     })
     setPlayer(updated)
 
+    // 4. Mostramos el aviso de potenciador si aplicó alguno.
+    const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
+    if (notifications.length > 0) setBoostQueue(notifications)
+
     await gameHistoryDB.create({
-      userId: player.id,
+      userId: currentPlayer.id,
       gameType: 'lottery',
       betAmount,
       result: { matches, drawn: shuffled, picked },
-      winAmount: payout,
-      profit: payout - betAmount,
-      gameDetails: { prize: prize?.label },
+      winAmount: won ? boostResult.finalPayout : (boostResult.shieldUsed ? betAmount : 0),
+      profit: boostResult.finalPayout - betAmount,
+      gameDetails: { prize: prize?.label, boostApplied: boostResult.shieldUsed || boostResult.boostBonusTokens > 0 },
     })
 
     await statsDB.recordGame({
-      userId: player.id,
+      userId: currentPlayer.id,
       won,
-      payout,
-      betAmount,
+      payout: basePayout,
+      betAmount: boostResult.shieldUsed ? 0 : betAmount,
     })
   }
 
@@ -104,6 +132,10 @@ export default function Loteria() {
   return (
     <div className="min-h-screen flex flex-col" style={{background:'linear-gradient(180deg,#1a0e05,#0d0704)'}}>
       <GameHeader title="LOTERÍA" balance={player?.tokens} infoTitle="Cómo jugar Lotería" infoContent={INFO} />
+      <BoostAlert
+        notification={boostQueue[0] || null}
+        onClose={() => setBoostQueue(prev => prev.slice(1))}
+      />
       <p className="text-xs text-muted-foreground text-center mb-2">Elige {PICK_COUNT} números del 1 al {TOTAL_BALLS}</p>
       <div className="px-4 mb-2">
         <div className="rounded-2xl p-3 min-h-[64px]" style={{background:'rgba(0,0,0,0.4)',border:'1px solid rgba(212,160,23,0.2)'}}>
