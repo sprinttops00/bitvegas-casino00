@@ -95,6 +95,7 @@ export default function Tasks() {
     const updated = await userDB.update(player.id, {
       tokens: newTokens,
       points: newPoints,
+      weekly_points: (player.weekly_points || 0) + (rewardPoints || 0),
     })
     // Registra la transacción para trazabilidad y auditoría
     if (rewardTokens > 0) {
