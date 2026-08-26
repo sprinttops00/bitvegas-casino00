@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB, boostDB, jackpotDB } from '@/lib/db'
 import { getBoostNotifications } from '@/lib/boostNotify'
 import { TrendingUp } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -93,8 +93,13 @@ export default function Crash() {
     const updated = await userDB.update(currentPlayer.id, {
       tokens: newTokens,
       points: (currentPlayer.points || 0) + boostResult.finalPoints,
+      weekly_points: (currentPlayer.weekly_points || 0) + boostResult.finalPoints,
     })
     setPlayer(updated)
+
+    if (!won && !boostResult.shieldUsed) {
+        await jackpotDB.addToPot(betAmount)
+      }
 
     // Mostramos el aviso de potenciador si aplicó alguno.
     const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
