@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { getBoostNotifications } from '@/lib/boostNotify'
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
+import BoostAlert from '@/components/BoostAlert'
 
 const RED_NUMBERS = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]
 const WHEEL_NUMBERS = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26]
@@ -96,6 +98,7 @@ export default function Roulette() {
   const [spinning, setSpinning] = useState(false)
   const [outcome, setOutcome] = useState(null)
   const [rotation, setRotation] = useState(0)
+  const [boostQueue, setBoostQueue] = useState([])
 
   useEffect(() => { loadPlayer() }, [])
 
@@ -118,35 +121,57 @@ export default function Roulette() {
     const newRotation = rotation + (spins * 360) + (360 - (rotation % 360)) + (360 - targetAngle) % 360
     setRotation(newRotation)
 
+    // 1. Descontamos la apuesta del saldo de inmediato, antes de que corra la animación.
+    const currentPlayer = player
+    const afterBet = currentPlayer.tokens - betAmount
+    const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
+    setPlayer(deducted)
+
     setTimeout(async () => {
       const won = checkWin(selectedBet, resultNumber, exactNumber)
       const multiplier = getPayoutMultiplier(selectedBet)
-      const payout = won ? Math.floor(betAmount * multiplier) : 0
-      const newTokens = player.tokens - betAmount + payout
+      const basePayout = won ? Math.floor(betAmount * multiplier) : 0
+      const basePoints = won ? 50 : 5
 
-      setOutcome({ won, payout, resultNumber })
+      // 2. Aplicamos los potenciadores activos del inventario (escudo, amuleto, VIP, doble pts).
+      const boostResult = await boostDB.processGameBoosts({
+        userId: currentPlayer.id,
+        won,
+        betAmount,
+        basePayout,
+        basePoints,
+      })
 
-      const updated = await userDB.update(player.id, {
-        tokens: newTokens,
-        points: (player.points || 0) + (won ? 50 : 5),
+      // 3. Acreditamos el resultado final (ganancia, o reembolso si el escudo se activó).
+      const finalTokens = afterBet + boostResult.finalPayout
+
+      setOutcome({ won, payout: basePayout, resultNumber })
+
+      const updated = await userDB.update(currentPlayer.id, {
+        tokens: finalTokens,
+        points: (currentPlayer.points || 0) + boostResult.finalPoints,
       })
       setPlayer(updated)
 
+      // 4. Mostramos el aviso de potenciador si aplicó alguno.
+      const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
+      if (notifications.length > 0) setBoostQueue(notifications)
+
       await gameHistoryDB.create({
-        userId: player.id,
+        userId: currentPlayer.id,
         gameType: 'roulette',
         betAmount,
         result: { number: resultNumber, betType: selectedBet },
-        winAmount: payout,
-        profit: payout - betAmount,
-        gameDetails: { betType: selectedBet, exactNumber },
+        winAmount: won ? boostResult.finalPayout : (boostResult.shieldUsed ? betAmount : 0),
+        profit: boostResult.finalPayout - betAmount,
+        gameDetails: { betType: selectedBet, exactNumber, boostApplied: boostResult.shieldUsed || boostResult.boostBonusTokens > 0 },
       })
 
       await statsDB.recordGame({
-        userId: player.id,
+        userId: currentPlayer.id,
         won,
-        payout,
-        betAmount,
+        payout: basePayout,
+        betAmount: boostResult.shieldUsed ? 0 : betAmount,
       })
 
       setSpinning(false)
@@ -159,6 +184,10 @@ export default function Roulette() {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #1a0e05 0%, #0d0704 100%)' }}>
       <GameHeader title="RULETA" balance={player?.tokens} infoTitle="Cómo jugar Ruleta" infoContent={INFO} />
+      <BoostAlert
+        notification={boostQueue[0] || null}
+        onClose={() => setBoostQueue(prev => prev.slice(1))}
+      />
       <div className="flex justify-center mb-2">
         <RouletteWheel rotation={rotation} spinning={spinning} />
       </div>
