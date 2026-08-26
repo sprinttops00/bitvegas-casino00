@@ -1,5 +1,9 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ArrowLeft } from 'lucide-react';
+import { getCurrentUser } from '@/lib/telegramUser'
+import { userDB } from '@/lib/db'
+import Avatar from '@/components/Avatar'
 
 const GAMES = [
   { id: 'roulette', name: 'Ruleta', description: 'Apuesta a números, colores o docenas', emoji: '🎡', path: '/games/roulette', gradient: 'from-red-900/40 to-red-950/20', border: '#8B1414', tag: 'CLÁSICO' },
@@ -11,9 +15,35 @@ const GAMES = [
 ];
 
 export default function Games() {
+  const [player, setPlayer] = useState(null)
+
+  useEffect(() => { loadPlayer() }, [])
+
+  const loadPlayer = async () => {
+    const tgUser = getCurrentUser()
+    const u = await userDB.findByTelegramId(tgUser.telegram_id)
+    if (u) setPlayer(u)
+  }
+
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #1a0e05 0%, #0d0704 100%)' }}>
-      <div className="px-4 pt-6 pb-4">
+      {/* Header estandarizado */}
+      <div className="flex items-center gap-3 px-4 pt-5 pb-3">
+        <Link to="/" className="w-9 h-9 rounded-xl bg-secondary/60 border border-border flex items-center justify-center shrink-0">
+          <ArrowLeft size={18} />
+        </Link>
+        <Avatar src={player?.photo_url} name={player?.username || player?.first_name} size={40} />
+        <div className="flex-1">
+          <h1 className="text-lg font-black text-foreground">{player?.username || player?.first_name || 'Jugador'}</h1>
+          <p className="text-[10px] text-muted-foreground font-bold">{(player?.points || 0).toLocaleString()} PTS</p>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] text-muted-foreground">TOKENS</div>
+          <div className="text-base font-black text-primary">{(player?.tokens || 0).toLocaleString()}</div>
+        </div>
+      </div>
+
+      <div className="px-4 pb-4">
         <h1 className="text-3xl font-black tracking-wider" style={{
           background: 'linear-gradient(180deg, #f6d365 0%, #d4a017 50%, #9a6f00 100%)',
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
