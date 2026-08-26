@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { getBoostNotifications } from '@/lib/boostNotify'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
+import BoostAlert from '@/components/BoostAlert'
 
 const MAX_NUM = 11
 
@@ -24,6 +26,7 @@ export default function HighLow() {
   const [guessing, setGuessing] = useState(false)
   const [outcome, setOutcome] = useState(null)
   const [streak, setStreak] = useState(0)
+  const [boostQueue, setBoostQueue] = useState([])
 
   useEffect(() => { loadPlayer(); setCurrentNumber(getRandomNumber()) }, [])
 
@@ -37,6 +40,13 @@ export default function HighLow() {
     if (!player || guessing || betAmount > player.tokens) return
     setGuessing(true)
     setOutcome(null)
+    const currentPlayer = player
+
+    // 1. Descontamos la apuesta del saldo de inmediato, antes de la animación.
+    const afterBet = currentPlayer.tokens - betAmount
+    const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
+    setPlayer(deducted)
+
     const next = getRandomNumber()
     setNextNumber(next)
     await new Promise(r => setTimeout(r, 600))
@@ -50,33 +60,49 @@ export default function HighLow() {
     const newStreak = won ? streak + 1 : 0
     const streakBonus = won && newStreak >= 3 ? Math.floor(betAmount * 0.5) : 0
     const basePayout = won ? (choice === 'equal' ? betAmount * 7 : Math.floor(betAmount * 2)) : 0
-    const totalPayout = basePayout + streakBonus
-    const newTokens = player.tokens - betAmount + totalPayout
+    const totalBasePayout = basePayout + streakBonus
+    const basePoints = won ? 25 : 3
+
+    // 2. Aplicamos los potenciadores activos del inventario.
+    const boostResult = await boostDB.processGameBoosts({
+      userId: currentPlayer.id,
+      won,
+      betAmount,
+      basePayout: totalBasePayout,
+      basePoints,
+    })
+
+    // 3. Acreditamos el resultado final (ganancia, o reembolso si el escudo se activó).
+    const finalTokens = afterBet + boostResult.finalPayout
 
     setStreak(newStreak)
-    setOutcome({ won, payout: totalPayout, next: displayNext, choice, streakBonus })
+    setOutcome({ won, payout: totalBasePayout, next: displayNext, choice, streakBonus })
 
-    const updated = await userDB.update(player.id, {
-      tokens: newTokens,
-      points: (player.points || 0) + (won ? 25 : 3),
+    const updated = await userDB.update(currentPlayer.id, {
+      tokens: finalTokens,
+      points: (currentPlayer.points || 0) + boostResult.finalPoints,
     })
     setPlayer(updated)
 
+    // 4. Mostramos el aviso de potenciador si aplicó alguno.
+    const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
+    if (notifications.length > 0) setBoostQueue(notifications)
+
     await gameHistoryDB.create({
-      userId: player.id,
+      userId: currentPlayer.id,
       gameType: 'highlow',
       betAmount,
       result: { next: displayNext, choice },
-      winAmount: totalPayout,
-      profit: totalPayout - betAmount,
-      gameDetails: { choice, streakBonus },
+      winAmount: won ? boostResult.finalPayout : (boostResult.shieldUsed ? betAmount : 0),
+      profit: boostResult.finalPayout - betAmount,
+      gameDetails: { choice, streakBonus, boostApplied: boostResult.shieldUsed || boostResult.boostBonusTokens > 0 },
     })
 
     await statsDB.recordGame({
-      userId: player.id,
+      userId: currentPlayer.id,
       won,
-      payout: totalPayout,
-      betAmount,
+      payout: totalBasePayout,
+      betAmount: boostResult.shieldUsed ? 0 : betAmount,
     })
 
     setTimeout(() => { setCurrentNumber(displayNext); setNextNumber(null); setGuessing(false) }, 1500)
@@ -87,6 +113,10 @@ export default function HighLow() {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #1a0e05 0%, #0d0704 100%)' }}>
       <GameHeader title="HIGH / LOW" balance={player?.tokens} infoTitle="Cómo jugar High/Low" infoContent={INFO} />
+      <BoostAlert
+        notification={boostQueue[0] || null}
+        onClose={() => setBoostQueue(prev => prev.slice(1))}
+      />
       <div className="flex justify-center items-center gap-6 py-4">
         <motion.div key={currentNumber} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
           className="w-24 h-24 rounded-2xl flex items-center justify-center"
