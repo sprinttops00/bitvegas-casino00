@@ -50,6 +50,7 @@ export default function DailyReward() {
     const updated = await userDB.update(player.id, {
       tokens: player.tokens + reward,
       points: (player.points || 0) + Math.floor(reward / 2),
+      weekly_points: (player.weekly_points || 0) + Math.floor(reward / 2),
       last_daily_claim: new Date().toISOString(),
       daily_streak: nextDay,
     })
