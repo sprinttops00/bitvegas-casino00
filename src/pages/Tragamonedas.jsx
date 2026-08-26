@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
-import { userDB, gameHistoryDB, statsDB } from '@/lib/db'
+import { userDB, gameHistoryDB, statsDB, boostDB } from '@/lib/db'
+import { getBoostNotifications } from '@/lib/boostNotify'
 import { motion, AnimatePresence } from 'framer-motion'
 import GameHeader from '@/components/GameHeader'
+import BoostAlert from '@/components/BoostAlert'
 
 const SYMBOLS = ['🍒','🍋','🍊','⭐','💎','7️⃣','🔔','🍇']
 const FRUIT_SYMBOLS = ['🍒','🍋','🍊','🍇']
@@ -48,6 +50,7 @@ export default function Tragamonedas() {
   const [spinning, setSpinning] = useState(false)
   const [reels, setReels] = useState(['🍒','🍒','🍒'])
   const [outcome, setOutcome] = useState(null)
+  const [boostQueue, setBoostQueue] = useState([])
 
   useEffect(() => { loadPlayer() }, [])
 
@@ -60,38 +63,62 @@ export default function Tragamonedas() {
   const spin = async () => {
     if (!player || spinning || betAmount > player.tokens) return
     setSpinning(true); setOutcome(null)
+    const currentPlayer = player
     const r1=randomSymbol(),r2=randomSymbol(),r3=randomSymbol()
+
+    // 1. Descontamos la apuesta del saldo de inmediato, antes de la animación.
+    const afterBet = currentPlayer.tokens - betAmount
+    const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
+    setPlayer(deducted)
+
     setTimeout(async () => {
       setReels([r1,r2,r3])
       const combo=`${r1}${r2}${r3}`
       let mult=PAYOUTS[combo]||0
       if (!mult && r1===r2 && r2===r3 && FRUIT_SYMBOLS.includes(r1)) mult=2
       const won=mult>0
-      const payout=won?betAmount*mult:0
-      const newTokens=player.tokens-betAmount+payout
-      setOutcome({won,payout,mult})
+      const basePayout=won?betAmount*mult:0
+      const basePoints = won ? 35 : 4
 
-      const updated = await userDB.update(player.id, {
-        tokens: newTokens,
-        points: (player.points || 0) + (won ? 35 : 4),
+      // 2. Aplicamos los potenciadores activos del inventario.
+      const boostResult = await boostDB.processGameBoosts({
+        userId: currentPlayer.id,
+        won,
+        betAmount,
+        basePayout,
+        basePoints,
+      })
+
+      // 3. Acreditamos el resultado final (ganancia, o reembolso si el escudo se activó).
+      const finalTokens = afterBet + boostResult.finalPayout
+
+      setOutcome({won,payout:basePayout,mult})
+
+      const updated = await userDB.update(currentPlayer.id, {
+        tokens: finalTokens,
+        points: (currentPlayer.points || 0) + boostResult.finalPoints,
       })
       setPlayer(updated)
 
+      // 4. Mostramos el aviso de potenciador si aplicó alguno.
+      const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
+      if (notifications.length > 0) setBoostQueue(notifications)
+
       await gameHistoryDB.create({
-        userId: player.id,
+        userId: currentPlayer.id,
         gameType: 'slots',
         betAmount,
         result: { reels: [r1,r2,r3], combo },
-        winAmount: payout,
-        profit: payout - betAmount,
-        gameDetails: { multiplier: mult },
+        winAmount: won ? boostResult.finalPayout : (boostResult.shieldUsed ? betAmount : 0),
+        profit: boostResult.finalPayout - betAmount,
+        gameDetails: { multiplier: mult, boostApplied: boostResult.shieldUsed || boostResult.boostBonusTokens > 0 },
       })
 
       await statsDB.recordGame({
-        userId: player.id,
+        userId: currentPlayer.id,
         won,
-        payout,
-        betAmount,
+        payout: basePayout,
+        betAmount: boostResult.shieldUsed ? 0 : betAmount,
       })
 
       setSpinning(false)
@@ -103,6 +130,10 @@ export default function Tragamonedas() {
   return (
     <div className="min-h-screen flex flex-col" style={{background:'linear-gradient(180deg,#1a0e05,#0d0704)'}}>
       <GameHeader title="SLOTS" balance={player?.tokens} infoTitle="Cómo jugar Tragamonedas" infoContent={INFO} />
+      <BoostAlert
+        notification={boostQueue[0] || null}
+        onClose={() => setBoostQueue(prev => prev.slice(1))}
+      />
       <div className="flex justify-center mb-3 px-4">
         <div className="rounded-3xl p-5 w-full max-w-xs" style={{background:'linear-gradient(180deg,#4a2e0a,#2a1505)',border:'4px solid #8B6914',boxShadow:'0 0 0 2px #d4a017'}}>
           <div className="flex gap-3 justify-center mb-4">
