@@ -59,7 +59,7 @@ export default function Profile() {
           <Avatar src={player?.photo_url} name={player?.username || player?.first_name} size={48} />
           <div>
             <h1 className="text-lg font-black text-foreground">{player?.username || player?.first_name || '...'}</h1>
-            <p className="text-xs text-muted-foreground">{(player?.points || 0).toLocaleString()} PTS</p>
+            <p className="text-xs text-muted-foreground">{(player?.weekly_points || 0).toLocaleString()} PTS</p>
           </div>
         </div>
         <div className="text-right">
