@@ -275,7 +275,7 @@ export default function Withdraw() {
         <Avatar src={player?.photo_url} name={player?.username || player?.first_name} size={40} />
         <div className="flex-1">
           <h1 className="text-lg font-black text-foreground">{player?.username || player?.first_name || 'Jugador'}</h1>
-          <p className="text-[10px] text-muted-foreground font-bold">{(player?.points || 0).toLocaleString()} PTS</p>
+          <p className="text-[10px] text-muted-foreground font-bold">{(player?.weekly_points || 0).toLocaleString()} PTS</p>
         </div>
         <div className="text-right">
           <div className="text-[10px] text-muted-foreground">TOKENS</div>
