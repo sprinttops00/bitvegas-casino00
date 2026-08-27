@@ -29,7 +29,7 @@ export default function Dashboard() {
     { label: 'Perdidos', value: (stats.total_losses || 0).toLocaleString(), icon: Zap, color: 'text-accent', bg: 'bg-accent/10' },
     { label: 'Win Rate', value: `${winRate}%`, icon: Target, color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
     { label: 'Partidas', value: totalGames, icon: Trophy, color: 'text-green-400', bg: 'bg-green-500/10' },
-    { label: 'Puntos', value: (player?.points || 0).toLocaleString(), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10' },
+    { label: 'Puntos', value: (player?.weekly_points || 0).toLocaleString(), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10' },
   ]
 
   return (
