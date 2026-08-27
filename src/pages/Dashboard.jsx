@@ -37,7 +37,7 @@ export default function Dashboard() {
       <h1 className="text-2xl font-black text-foreground mb-4">Dashboard</h1>
       <div className="rounded-2xl p-4 text-center border border-primary/20 mb-4" style={{ background: 'rgba(212,160,23,0.08)' }}>
         <p className="text-xs text-muted-foreground uppercase tracking-wider">Tu progreso</p>
-        <p className="text-3xl font-black mt-1 text-primary">{(player?.points || 0).toLocaleString()} PTS</p>
+        <p className="text-3xl font-black mt-1 text-primary">{(player?.weekly_points || 0).toLocaleString()} PTS</p>
         <p className="text-xs text-muted-foreground mt-1">{totalGames} partidas · mayor win: {(stats.biggest_win || 0).toLocaleString()}</p>
       </div>
       <div className="grid grid-cols-3 gap-2 mb-5">
