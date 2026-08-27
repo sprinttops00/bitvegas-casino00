@@ -118,7 +118,7 @@ export default function Lobby() {
             </div>
             <div className="text-right">
               <p className="text-[10px] text-white/40 font-bold">PUNTOS</p>
-              <p className="text-2xl font-black text-white">{(player?.points || 0).toLocaleString()}</p>
+              <p className="text-2xl font-black text-white">{(player?.weekly_points || 0).toLocaleString()}</p>
             </div>
           </div>
         </div>
