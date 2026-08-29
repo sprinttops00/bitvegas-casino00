@@ -41,6 +41,7 @@ export default function Ranking() {
   const [me, setMe] = useState(null)
   const [myRank, setMyRank] = useState(null)
   const [jackpot, setJackpot] = useState(0)
+  const countdown = useJackpotCountdown()
 
   useEffect(() => { loadData() }, [])
 
@@ -94,6 +95,9 @@ export default function Ranking() {
           <p className="text-2xl font-black text-primary">{jackpot.toLocaleString()} TOKENS</p>
           <p className="text-[10px] text-muted-foreground mt-1">
             Se reparte cada domingo 8:00 PM · 🥇 60% · 🥈 25% · 🥉 15%
+          <p className="text-xs font-black text-primary mt-2">
+            ⏳ Quedan: {countdown}
+          </p>
           </p>
         </div>
       </div>
