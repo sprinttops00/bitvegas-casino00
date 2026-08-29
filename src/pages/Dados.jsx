@@ -143,7 +143,7 @@ export default function Dados() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{background:'linear-gradient(180deg,#1a0e05,#0d0704)'}}>
-      <GameHeader title="DADOS" balance={player?.tokens} infoTitle="Cómo jugar Dados" infoContent={INFO} />
+      <GameHeader title="DADOS" player={player} infoTitle="Cómo jugar Dados" infoContent={INFO} />
       <BoostAlert
         notification={boostQueue[0] || null}
         onClose={() => setBoostQueue(prev => prev.slice(1))}
