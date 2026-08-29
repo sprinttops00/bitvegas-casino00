@@ -188,7 +188,7 @@ export default function Roulette() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #1a0e05 0%, #0d0704 100%)' }}>
-      <GameHeader title="RULETA" balance={player?.tokens} infoTitle="Cómo jugar Ruleta" infoContent={INFO} />
+      <GameHeader title="RULETA" player={player} infoTitle="Cómo jugar Ruleta" infoContent={INFO} />
       <BoostAlert
         notification={boostQueue[0] || null}
         onClose={() => setBoostQueue(prev => prev.slice(1))}
