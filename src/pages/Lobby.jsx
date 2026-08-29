@@ -8,6 +8,7 @@ import { CONFIG } from '@/lib/config'
 import { ChevronRight, Bell } from 'lucide-react'
 import WelcomeModal from '@/components/WelcomeModal'
 import Avatar from '@/components/Avatar'
+import JackpotWinModal from '@/components/JackpotWinModal'
 
 export default function Lobby() {
   const [player, setPlayer] = useState(null)
@@ -15,6 +16,7 @@ export default function Lobby() {
   const [showWelcome, setShowWelcome] = useState(false)
   const [watchingAd, setWatchingAd] = useState(false)
   const [adMessage, setAdMessage] = useState(null)
+  const [jackpotWin, setJackpotWin] = useState(null)
 
   // Recargamos los datos del jugador siempre que el Lobby vuelve a estar
   // activo. Así las estadísticas (Jugadas / Victorias / Mejor racha) y el
@@ -30,6 +32,9 @@ export default function Lobby() {
       const todayStr = new Date().toISOString().split('T')[0]
       const lastClaim = u.last_daily_claim?.split('T')[0]
       setDailyClaimed(lastClaim === todayStr)
+    if (u.pending_jackpot_amount > 0) {
+      setJackpotWin({ rank: u.pending_jackpot_rank, amount: u.pending_jackpot_amount })
+      }
     } else {
       const newUser = await userDB.create(tgUser)
       setPlayer(newUser)
