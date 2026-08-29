@@ -6,6 +6,8 @@ import { Link } from 'react-router-dom'
 import Avatar from '@/components/Avatar'
 
 // Calcula la próxima fecha/hora del reparto: domingo 8:00 PM, hora del Este de EE.UU.
+// (se recalcula sola cada vez que se llama, así que apenas pasa el domingo, automáticamente
+// "salta" al domingo siguiente sin que haya que resetear nada a mano).
 function getNextPayoutDate() {
   const now = new Date()
   const easternNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
@@ -47,7 +49,6 @@ export default function Ranking() {
 
   const loadData = async () => {
     const tgUser = getCurrentUser()
-    // Ordenado por puntos SEMANALES: la competencia se reinicia cada domingo.
     const all = await userDB.listAll('weekly_points', 50)
     setPlayers(all)
     const myP = all.find(p => p.telegram_id === tgUser.telegram_id)
@@ -82,7 +83,6 @@ export default function Ranking() {
         <h1 className="text-xl font-black text-foreground">Ranking Semanal</h1>
       </div>
 
-      {/* Jackpot acumulado de la semana */}
       <div className="px-4 mb-4">
         <div className="rounded-2xl p-4 text-center" style={{
           background: 'linear-gradient(180deg, rgba(212,160,23,0.15), rgba(212,160,23,0.05))',
@@ -95,9 +95,9 @@ export default function Ranking() {
           <p className="text-2xl font-black text-primary">{jackpot.toLocaleString()} TOKENS</p>
           <p className="text-[10px] text-muted-foreground mt-1">
             Se reparte cada domingo 8:00 PM · 🥇 60% · 🥈 25% · 🥉 15%
+          </p>
           <p className="text-xs font-black text-primary mt-2">
             ⏳ Quedan: {countdown}
-          </p>
           </p>
         </div>
       </div>
