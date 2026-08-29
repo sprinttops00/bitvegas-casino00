@@ -1,9 +1,19 @@
 import { useEffect, useState } from 'react'
 import { getCurrentUser } from '@/lib/telegramUser'
 import { userDB, jackpotDB } from '@/lib/db'
-import { Crown, Medal, ArrowLeft, Coins } from 'lucide-react'
+import { Crown, Medal, ArrowLeft, Coins, Info, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import Avatar from '@/components/Avatar'
+
+const RANKING_INFO = [
+  '🏆 El Ranking se ordena por tus PUNTOS de esta semana — se reinician cada domingo, para que todos empiecen parejos.',
+  '🎮 Ganas puntos jugando cualquiera de los 6 juegos. Mientras más juegues (y ganes), más puntos sumas y más subes en la tabla.',
+  '💰 Cada vez que alguien pierde una apuesta (sin Escudo activo), esos tokens se van directo al Jackpot de la semana.',
+  '⏳ Cada domingo a las 8:00 PM se reparte TODO el Jackpot entre el Top 3: 🥇 60% · 🥈 25% · 🥉 15%.',
+  '🔁 Después del reparto, el Jackpot vuelve a 0 y el Ranking se reinicia — nueva semana, misma oportunidad para todos.',
+  '🚀 ¡Mientras más juegues, más rápido crece el Jackpot y más puntos sumas para meterte en el Top 3! No te quedes fuera del reparto del domingo.',
+]
 
 // Calcula la próxima fecha/hora del reparto: domingo 8:00 PM, hora del Este de EE.UU.
 // (se recalcula sola cada vez que se llama, así que apenas pasa el domingo, automáticamente
@@ -43,6 +53,7 @@ export default function Ranking() {
   const [me, setMe] = useState(null)
   const [myRank, setMyRank] = useState(null)
   const [jackpot, setJackpot] = useState(0)
+  const [showInfo, setShowInfo] = useState(false)
   const countdown = useJackpotCountdown()
 
   useEffect(() => { loadData() }, [])
@@ -80,8 +91,39 @@ export default function Ranking() {
     <div className="min-h-screen pb-24">
       <div className="flex items-center gap-3 px-4 pt-5 pb-3">
         <Link to="/" className="w-9 h-9 rounded-xl bg-secondary/60 border border-border flex items-center justify-center shrink-0"><ArrowLeft size={18}/></Link>
-        <h1 className="text-xl font-black text-foreground">Ranking Semanal</h1>
+        <h1 className="text-xl font-black text-foreground flex-1">Ranking Semanal</h1>
+        <button onClick={() => setShowInfo(true)}
+          className="w-9 h-9 rounded-xl border border-primary/30 flex items-center justify-center shrink-0"
+          style={{ background: 'rgba(212,160,23,0.12)' }}>
+          <Info size={16} className="text-primary" />
+        </button>
       </div>
+
+      <AnimatePresence>
+        {showInfo && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style={{ background: 'rgba(0,0,0,0.8)' }}
+            onClick={() => setShowInfo(false)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm rounded-3xl p-6"
+              style={{ background: 'linear-gradient(135deg, #1a1200, #0d0900)', border: '2px solid rgba(212,160,23,0.4)' }}
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-black text-primary">📖 Cómo funciona el Ranking</h2>
+                <button onClick={() => setShowInfo(false)} className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="space-y-2 text-sm text-muted-foreground leading-relaxed">
+                {RANKING_INFO.map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="px-4 mb-4">
         <div className="rounded-2xl p-4 text-center" style={{
