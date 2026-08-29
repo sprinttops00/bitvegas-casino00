@@ -5,6 +5,37 @@ import { Crown, Medal, ArrowLeft, Coins } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Avatar from '@/components/Avatar'
 
+// Calcula la próxima fecha/hora del reparto: domingo 8:00 PM, hora del Este de EE.UU.
+function getNextPayoutDate() {
+  const now = new Date()
+  const easternNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
+  const dayOfWeek = easternNow.getDay() // 0 = domingo
+  let daysUntilSunday = (7 - dayOfWeek) % 7
+  const target = new Date(easternNow)
+  target.setDate(easternNow.getDate() + daysUntilSunday)
+  target.setHours(20, 0, 0, 0)
+  if (target <= easternNow) target.setDate(target.getDate() + 7)
+  const diffLocalVsEastern = now.getTime() - easternNow.getTime()
+  return new Date(target.getTime() + diffLocalVsEastern)
+}
+
+function useJackpotCountdown() {
+  const [timeLeft, setTimeLeft] = useState('')
+  useEffect(() => {
+    const update = () => {
+      const diff = getNextPayoutDate().getTime() - Date.now()
+      const days = Math.floor(diff / 86400000)
+      const hours = Math.floor((diff % 86400000) / 3600000)
+      const minutes = Math.floor((diff % 3600000) / 60000)
+      setTimeLeft(`${String(days).padStart(2, '0')} días, ${String(hours).padStart(2, '0')}h, ${String(minutes).padStart(2, '0')} min`)
+    }
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [])
+  return timeLeft
+}
+
 export default function Ranking() {
   const [players, setPlayers] = useState([])
   const [me, setMe] = useState(null)
