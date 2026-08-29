@@ -134,7 +134,7 @@ export default function Tragamonedas() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{background:'linear-gradient(180deg,#1a0e05,#0d0704)'}}>
-      <GameHeader title="SLOTS" balance={player?.tokens} infoTitle="Cómo jugar Tragamonedas" infoContent={INFO} />
+      <GameHeader title="SLOTS" player={player} infoTitle="Cómo jugar Tragamonedas" infoContent={INFO} />
       <BoostAlert
         notification={boostQueue[0] || null}
         onClose={() => setBoostQueue(prev => prev.slice(1))}
