@@ -32,8 +32,10 @@ export default function Lobby() {
       const todayStr = new Date().toISOString().split('T')[0]
       const lastClaim = u.last_daily_claim?.split('T')[0]
       setDailyClaimed(lastClaim === todayStr)
-    if (u.pending_jackpot_amount > 0) {
-      setJackpotWin({ rank: u.pending_jackpot_rank, amount: u.pending_jackpot_amount })
+
+      // ¿El jugador quedó en el Top 3 del Jackpot semanal mientras no estaba conectado?
+      if (u.pending_jackpot_amount > 0) {
+        setJackpotWin({ rank: u.pending_jackpot_rank, amount: u.pending_jackpot_amount })
       }
     } else {
       const newUser = await userDB.create(tgUser)
@@ -73,9 +75,18 @@ export default function Lobby() {
     })
   }
 
+  // ── Cerrar el aviso de "ganaste el Jackpot" y limpiarlo en la base de datos ──
+  const closeJackpotWin = async () => {
+    if (!player) return
+    setJackpotWin(null)
+    const updated = await userDB.update(player.id, { pending_jackpot_rank: null, pending_jackpot_amount: 0 })
+    setPlayer(updated)
+  }
+
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #0d0a00 0%, #0d0704 100%)' }}>
       {showWelcome && <WelcomeModal username={player?.username} onClose={() => setShowWelcome(false)} />}
+      <JackpotWinModal rank={jackpotWin?.rank} amount={jackpotWin?.amount} onClose={closeJackpotWin} />
 
       <div className="px-4 pt-5 pb-3 flex items-center gap-3">
         <Link to="/profile">
