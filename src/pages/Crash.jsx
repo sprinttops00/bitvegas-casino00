@@ -129,7 +129,7 @@ export default function Crash() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg,#1a0e05,#0d0704)' }}>
-      <GameHeader title="CRASH" balance={player?.tokens} infoTitle="Cómo jugar Crash" infoContent={INFO} />
+      <GameHeader title="CRASH" player={player} infoTitle="Cómo jugar Crash" infoContent={INFO} />
       <BoostAlert
         notification={boostQueue[0] || null}
         onClose={() => setBoostQueue(prev => prev.slice(1))}
