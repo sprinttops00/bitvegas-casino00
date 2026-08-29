@@ -2,34 +2,41 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Info, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Avatar from '@/components/Avatar';
 
-export default function GameHeader({ title, balance, infoTitle, infoContent }) {
+// Header uniforme para las pantallas de juego: mismo patrón que el resto de
+// la app (flecha atrás + Avatar + Nombre + Puntos + Tokens), más el botón
+// de información con las reglas de cada juego debajo del título.
+export default function GameHeader({ player, title, infoTitle, infoContent }) {
   const [showInfo, setShowInfo] = useState(false);
 
   return (
     <>
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <Link to="/games" className="w-9 h-9 rounded-xl bg-secondary/60 border border-border flex items-center justify-center">
-          <ArrowLeft size={18} />
-        </Link>
-        <div className="text-center flex-1 px-2">
-          <h1 className="text-3xl font-black tracking-widest" style={{
-            background: 'linear-gradient(180deg, #f6d365 0%, #d4a017 50%, #9a6f00 100%)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            filter: 'drop-shadow(0 2px 6px rgba(212,160,23,0.5))',
-          }}>{title}</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="text-right mr-1">
+      <div className="px-4 pt-5 pb-2">
+        <div className="flex items-center gap-3 mb-2">
+          <Link to="/games" className="w-9 h-9 rounded-xl bg-secondary/60 border border-border flex items-center justify-center shrink-0">
+            <ArrowLeft size={18} />
+          </Link>
+          <Avatar src={player?.photo_url} name={player?.username || player?.first_name} size={40} />
+          <div className="flex-1 min-w-0">
+            <h2 className="text-sm font-black text-foreground truncate">{player?.username || player?.first_name || 'Jugador'}</h2>
+            <p className="text-[10px] text-muted-foreground font-bold">{(player?.weekly_points || 0).toLocaleString()} PTS</p>
+          </div>
+          <div className="text-right mr-1 shrink-0">
             <div className="text-[10px] text-muted-foreground">TOKENS</div>
-            <div className="text-base font-black text-primary">{(balance || 0).toLocaleString()}</div>
+            <div className="text-base font-black text-primary">{(player?.tokens || 0).toLocaleString()}</div>
           </div>
           <button onClick={() => setShowInfo(true)}
-            className="w-9 h-9 rounded-xl border border-primary/30 flex items-center justify-center"
+            className="w-9 h-9 rounded-xl border border-primary/30 flex items-center justify-center shrink-0"
             style={{ background: 'rgba(212,160,23,0.12)' }}>
             <Info size={16} className="text-primary" />
           </button>
         </div>
+        <h1 className="text-2xl font-black tracking-widest text-center" style={{
+          background: 'linear-gradient(180deg, #f6d365 0%, #d4a017 50%, #9a6f00 100%)',
+          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          filter: 'drop-shadow(0 2px 6px rgba(212,160,23,0.5))',
+        }}>{title}</h1>
       </div>
 
       <AnimatePresence>
