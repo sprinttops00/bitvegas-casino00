@@ -117,7 +117,7 @@ export default function HighLow() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #1a0e05 0%, #0d0704 100%)' }}>
-      <GameHeader title="HIGH / LOW" balance={player?.tokens} infoTitle="Cómo jugar High/Low" infoContent={INFO} />
+      <GameHeader title="HIGH / LOW" player={player} infoTitle="Cómo jugar High/Low" infoContent={INFO} />
       <BoostAlert
         notification={boostQueue[0] || null}
         onClose={() => setBoostQueue(prev => prev.slice(1))}
