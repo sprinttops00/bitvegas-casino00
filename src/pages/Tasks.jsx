@@ -14,7 +14,6 @@ function getActiveItems(items, categories, completedIds) {
   const active = []
   const categorizedTypes = new Set(categories)
 
-  // 1. Para las categorías en cadena: primera pendiente de cada categoría
   categories.forEach(cat => {
     const catItems = items
       .filter(it => it.type === cat)
@@ -25,7 +24,6 @@ function getActiveItems(items, categories, completedIds) {
     }
   })
 
-  // 2. Para cualquier otra tarea/logro cuyo tipo no esté en la lista fija
   const otherItems = items
     .filter(it => !categorizedTypes.has(it.type) && !completedIds.includes(it.id))
     .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
@@ -34,7 +32,6 @@ function getActiveItems(items, categories, completedIds) {
   return active
 }
 
-// Obtiene todos los items que el usuario ya completó/reclamó
 function getCompletedItems(items, completedIds) {
   return items
     .filter(it => completedIds.includes(it.id))
@@ -72,8 +69,6 @@ export default function Tasks() {
     setReferralCount(refs.length)
   }
 
-  // Compara el requisito de una tarea/logro con las estadísticas REALES
-  // del jugador (leídas de la base de datos).
   const getProgress = (item) => {
     const stats = player?.user_statistics || {}
     const target = Number(item.requirement) || 0
@@ -92,12 +87,12 @@ export default function Tasks() {
   const creditReward = async (rewardTokens, rewardPoints, sourceName = 'task_reward') => {
     const newTokens = (player.tokens || 0) + (rewardTokens || 0)
     const newPoints = (player.points || 0) + (rewardPoints || 0)
+    const newWeeklyPoints = (player.weekly_points || 0) + (rewardPoints || 0)
     const updated = await userDB.update(player.id, {
       tokens: newTokens,
       points: newPoints,
-      weekly_points: (player.weekly_points || 0) + (rewardPoints || 0),
+      weekly_points: newWeeklyPoints,
     })
-    // Registra la transacción para trazabilidad y auditoría
     if (rewardTokens > 0) {
       try {
         await transactionDB.create({
@@ -117,7 +112,6 @@ export default function Tasks() {
   const claimTask = async (task) => {
     if (!player || claiming) return
     if (completedTaskIds.includes(task.id)) return
-    // Las tareas automáticas solo se reclaman si el jugador cumple el requisito
     if (task.type !== 'social') {
       const { isComplete } = getProgress(task)
       if (!isComplete) return
@@ -132,7 +126,6 @@ export default function Tasks() {
     }
   }
 
-  // Tareas de redes sociales: abre el enlace y reclama
   const handleSocialTask = (task) => {
     if (!player || claiming) return
     if (task.link) {
@@ -159,7 +152,6 @@ export default function Tasks() {
   const totalItems = tasks.length + achievements.length
   const completedCount = completedTaskIds.length + completedAchievIds.length
 
-  // Listas separadas para Activas y Completadas
   const activeTasks = getActiveItems(tasks, TASK_CATEGORIES, completedTaskIds)
   const completedTasks = getCompletedItems(tasks, completedTaskIds)
 
@@ -181,19 +173,25 @@ export default function Tasks() {
 
   return (
     <div className="min-h-screen pb-24">
-      {/* Header */}
+      {/* Header estandarizado (igual al resto de la app) */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-3">
         <Link to="/" className="w-9 h-9 rounded-xl bg-secondary/60 border border-border flex items-center justify-center shrink-0">
           <ArrowLeft size={18} />
         </Link>
         <Avatar src={player?.photo_url} name={player?.username || player?.first_name} size={40} />
-        <div className="flex-1">
-          <h1 className="text-lg font-black text-foreground">Tareas & Logros</h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg font-black text-foreground truncate">{player?.username || player?.first_name || 'Jugador'}</h1>
+          <p className="text-[10px] text-muted-foreground font-bold">{(player?.weekly_points || 0).toLocaleString()} PTS</p>
         </div>
         <div className="text-right">
           <div className="text-[10px] text-muted-foreground">TOKENS</div>
           <div className="text-base font-black text-primary">{(player?.tokens || 0).toLocaleString()}</div>
         </div>
+      </div>
+
+      {/* Título de la página (antes vivía dentro del header) */}
+      <div className="px-4 pb-2">
+        <h2 className="text-2xl font-black text-foreground">Tareas & Logros</h2>
       </div>
 
       {/* Barra de progreso global */}
@@ -226,7 +224,6 @@ export default function Tasks() {
       {/* ── PESTAÑA: TAREAS ─────────────────────────────────────────── */}
       {tab === 'tareas' && (
         <div className="px-4 space-y-4">
-          {/* SECCIÓN ACTIVAS */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-foreground/80 flex items-center gap-1.5 tracking-wider uppercase">
@@ -285,7 +282,6 @@ export default function Tasks() {
             )}
           </div>
 
-          {/* SECCIÓN COMPLETADAS */}
           {completedTasks.length > 0 && (
             <div className="pt-2 border-t border-border/40">
               <div className="flex items-center justify-between mb-2">
@@ -320,7 +316,6 @@ export default function Tasks() {
       {/* ── PESTAÑA: LOGROS ─────────────────────────────────────────── */}
       {tab === 'logros' && (
         <div className="px-4 space-y-4">
-          {/* SECCIÓN ACTIVOS */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-foreground/80 flex items-center gap-1.5 tracking-wider uppercase">
@@ -373,7 +368,6 @@ export default function Tasks() {
             )}
           </div>
 
-          {/* SECCIÓN COMPLETADOS */}
           {completedAchievements.length > 0 && (
             <div className="pt-2 border-t border-border/40">
               <div className="flex items-center justify-between mb-2">
