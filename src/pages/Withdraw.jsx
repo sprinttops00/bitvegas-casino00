@@ -283,6 +283,10 @@ export default function Withdraw() {
         </div>
       </div>
 
+       <div className="px-4 pb-2">
+        <h2 className="text-2xl font-black text-foreground">Retirar</h2>
+      </div>
+
       {/* Tarjeta de Saldo y Tasa */}
       <div className="px-4 mb-4">
         <div className="rounded-2xl p-4 text-center" style={{
