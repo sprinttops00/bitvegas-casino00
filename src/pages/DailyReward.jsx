@@ -46,11 +46,12 @@ export default function DailyReward() {
 
     const reward = getDayReward(dayToClaim)
     const nextDay = dayToClaim >= TOTAL_DAYS ? 1 : dayToClaim + 1
+    const pointsEarned = Math.floor(reward / 2)
 
     const updated = await userDB.update(player.id, {
       tokens: player.tokens + reward,
-      points: (player.points || 0) + Math.floor(reward / 2),
-      weekly_points: (player.weekly_points || 0) + Math.floor(reward / 2),
+      points: (player.points || 0) + pointsEarned,
+      weekly_points: (player.weekly_points || 0) + pointsEarned,
       last_daily_claim: new Date().toISOString(),
       daily_streak: nextDay,
     })
@@ -63,19 +64,26 @@ export default function DailyReward() {
 
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #0d0a00 0%, #0d0704 100%)' }}>
+      {/* Header estandarizado (igual al resto de la app) */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-3">
         <Link to="/" className="w-9 h-9 rounded-xl bg-secondary/60 border border-border flex items-center justify-center shrink-0">
           <ArrowLeft size={18} />
         </Link>
         <Avatar src={player?.photo_url} name={player?.username || player?.first_name} size={40} />
-        <div className="flex-1">
-          <h1 className="text-lg font-black text-foreground">Recompensa Diaria</h1>
-          <p className="text-[10px] text-muted-foreground">Reclama cada día sin fallar</p>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg font-black text-foreground truncate">{player?.username || player?.first_name || 'Jugador'}</h1>
+          <p className="text-[10px] text-muted-foreground font-bold">{(player?.weekly_points || 0).toLocaleString()} PTS</p>
         </div>
         <div className="text-right">
           <div className="text-[10px] text-muted-foreground">TOKENS</div>
           <div className="text-base font-black text-primary">{(player?.tokens || 0).toLocaleString()}</div>
         </div>
+      </div>
+
+      {/* Título de la página (antes vivía dentro del header) */}
+      <div className="px-4 pb-2">
+        <h2 className="text-2xl font-black text-foreground">Recompensa Diaria</h2>
+        <p className="text-xs text-muted-foreground">Reclama cada día sin fallar</p>
       </div>
 
       <div className="px-4 mb-4">
