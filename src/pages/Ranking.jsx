@@ -15,13 +15,10 @@ const RANKING_INFO = [
   '🚀 ¡Mientras más juegues, más rápido crece el Jackpot y más puntos sumas para meterte en el Top 3! No te quedes fuera del reparto del domingo.',
 ]
 
-// Calcula la próxima fecha/hora del reparto: domingo 8:00 PM, hora del Este de EE.UU.
-// (se recalcula sola cada vez que se llama, así que apenas pasa el domingo, automáticamente
-// "salta" al domingo siguiente sin que haya que resetear nada a mano).
 function getNextPayoutDate() {
   const now = new Date()
   const easternNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
-  const dayOfWeek = easternNow.getDay() // 0 = domingo
+  const dayOfWeek = easternNow.getDay()
   let daysUntilSunday = (7 - dayOfWeek) % 7
   const target = new Date(easternNow)
   target.setDate(easternNow.getDate() + daysUntilSunday)
@@ -91,12 +88,24 @@ export default function Ranking() {
     <div className="min-h-screen pb-24">
       <div className="flex items-center gap-3 px-4 pt-5 pb-3">
         <Link to="/" className="w-9 h-9 rounded-xl bg-secondary/60 border border-border flex items-center justify-center shrink-0"><ArrowLeft size={18}/></Link>
-        <h1 className="text-xl font-black text-foreground flex-1">Ranking Semanal</h1>
+        <Avatar src={me?.photo_url} name={me?.username || me?.first_name} size={40} />
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg font-black text-foreground truncate">{me?.username || me?.first_name || 'Jugador'}</h1>
+          <p className="text-[10px] text-muted-foreground font-bold">{(me?.weekly_points || 0).toLocaleString()} PTS</p>
+        </div>
+        <div className="text-right mr-1">
+          <div className="text-[10px] text-muted-foreground">TOKENS</div>
+          <div className="text-base font-black text-primary">{(me?.tokens || 0).toLocaleString()}</div>
+        </div>
         <button onClick={() => setShowInfo(true)}
           className="w-9 h-9 rounded-xl border border-primary/30 flex items-center justify-center shrink-0"
           style={{ background: 'rgba(212,160,23,0.12)' }}>
           <Info size={16} className="text-primary" />
         </button>
+      </div>
+
+      <div className="px-4 pb-2">
+        <h2 className="text-2xl font-black text-foreground">Ranking Semanal</h2>
       </div>
 
       <AnimatePresence>
