@@ -68,6 +68,10 @@ export default function Profile() {
         </div>
       </div>
 
+            <div className="px-4 pb-2">
+        <h2 className="text-2xl font-black text-foreground">Mi Perfil</h2>
+      </div>
+
       {/* Tabs */}
       <div className="px-4 mb-4">
         <div className="flex rounded-2xl overflow-hidden border border-border" style={{ background: 'rgba(0,0,0,0.3)' }}>
