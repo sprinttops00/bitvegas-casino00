@@ -216,6 +216,10 @@ export default function Store() {
         </div>
       </div>
 
+      <div className="px-4 pb-2">
+        <h2 className="text-2xl font-black text-foreground">Tienda</h2>
+      </div>
+
       {/* Notificación flotante de compra exitosa */}
       {successMsg && (
         <div className="px-4 mb-3">
