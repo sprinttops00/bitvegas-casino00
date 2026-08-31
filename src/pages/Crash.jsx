@@ -9,41 +9,42 @@ import BoostAlert from '@/components/BoostAlert'
 
 const GRID_SIZE = 25 // tablero 5x5
 const BOMB_COUNT = 5
-const SAFE_COUNT = GRID_SIZE - BOMB_COUNT // 20 casillas seguras
+const DIAMOND_COUNT = 8 // casillas con premio (recurso limitado, para cuidar la economía)
+const NEUTRAL_COUNT = GRID_SIZE - BOMB_COUNT - DIAMOND_COUNT // 12 casillas neutrales, no hacen nada
 
-// Curva de multiplicadores por cada casilla segura encontrada (1ra a 19na).
-// Diseñada para arrancar calcada a la progresión clásica (x1.10, x1.25, x1.45...)
-// y suavizarse después, para que el PERFECT RUN (casilla 20) siga siendo
-// el premio más grande del juego, sin números que se disparen sin control.
-const MULTIPLIER_TABLE = [
-  1.10, 1.25, 1.45, 1.70, 2.00, 2.35, 2.75, 3.20, 3.70, 4.25,
-  4.85, 5.50, 6.20, 6.95, 7.75, 8.60, 9.20, 9.55, 9.80,
-]
+// Multiplicador según cuántos DIAMANTES (no casillas neutrales) se han encontrado.
+const MULTIPLIER_TABLE = [1.10, 1.25, 1.45, 1.70, 2.00, 2.50, 3.00, 4.00]
 const PERFECT_RUN_MULTIPLIER = 10.0
 
 const INFO = [
-  '💣 Hay 5 bombas ocultas entre las 25 casillas del tablero. El resto son seguras.',
-  '💎 Cada casilla segura que descubras aumenta tu multiplicador — mientras más arriesgues, más puede crecer.',
-  '💰 Puedes presionar COBRAR en cualquier momento y quedarte con lo acumulado hasta ese punto.',
+  '🎲 El tablero de 25 casillas tiene 3 tipos ocultos: 💣 5 bombas, 💎 8 casillas con premio, y ⬜ el resto son neutrales (no hacen nada).',
+  '💎 Cada diamante que descubras aumenta tu multiplicador. Los diamantes son limitados — solo hay 8 en todo el tablero.',
+  '⬜ Las casillas neutrales no te dan nada ni te quitan nada, simplemente se revelan vacías y el juego continúa.',
+  '💰 Puedes presionar COBRAR en cualquier momento (después de encontrar al menos 1 diamante) y quedarte con lo acumulado.',
   '💥 Si descubres una bomba antes de cobrar, pierdes toda tu apuesta de esa ronda.',
-  '🏆 ¡Descubre las 20 casillas seguras sin explotar y gana el PERFECT RUN: x10 tu apuesta!',
+  '🏆 ¡Encuentra los 8 diamantes sin explotar y gana el PERFECT RUN: x10 tu apuesta!',
 ]
 
-function generateBombs() {
-  const positions = Array.from({ length: GRID_SIZE }, (_, i) => i)
-  for (let i = positions.length - 1; i > 0; i--) {
+function generateBoard() {
+  const cells = [
+    ...Array(BOMB_COUNT).fill('bomb'),
+    ...Array(DIAMOND_COUNT).fill('diamond'),
+    ...Array(NEUTRAL_COUNT).fill('neutral'),
+  ]
+  for (let i = cells.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [positions[i], positions[j]] = [positions[j], positions[i]]
+    [cells[i], cells[j]] = [cells[j], cells[i]]
   }
-  return new Set(positions.slice(0, BOMB_COUNT))
+  return cells
 }
 
 export default function Crash() {
   const [player, setPlayer] = useState(null)
   const [betAmount, setBetAmount] = useState(100)
   const [phase, setPhase] = useState('idle') // idle | playing | exploded | cashed | perfect
-  const [bombs, setBombs] = useState(new Set())
-  const [revealed, setRevealed] = useState([]) // índices de casillas seguras ya descubiertas
+  const [board, setBoard] = useState([]) // array de 25: 'bomb' | 'diamond' | 'neutral'
+  const [revealed, setRevealed] = useState([]) // índices ya destapados (de cualquier tipo)
+  const [diamondsFound, setDiamondsFound] = useState(0)
   const [lastBombHit, setLastBombHit] = useState(null)
   const [resultAmount, setResultAmount] = useState(0)
   const [boostQueue, setBoostQueue] = useState([])
@@ -56,8 +57,7 @@ export default function Crash() {
     if (u) setPlayer(u)
   }
 
-  const safeCount = revealed.length
-  const currentMultiplier = safeCount === 0 ? 1.0 : (MULTIPLIER_TABLE[safeCount - 1] || PERFECT_RUN_MULTIPLIER)
+  const currentMultiplier = diamondsFound === 0 ? 1.0 : MULTIPLIER_TABLE[diamondsFound - 1]
   const potentialPayout = Math.floor(betAmount * currentMultiplier)
 
   const startRound = async () => {
@@ -67,8 +67,9 @@ export default function Crash() {
     const updated = await userDB.update(player.id, { tokens: afterBet })
     setPlayer(updated)
 
-    setBombs(generateBombs())
+    setBoard(generateBoard())
     setRevealed([])
+    setDiamondsFound(0)
     setLastBombHit(null)
     setResultAmount(0)
     setPhase('playing')
@@ -76,30 +77,37 @@ export default function Crash() {
 
   const revealCell = (idx) => {
     if (phase !== 'playing' || revealed.includes(idx)) return
-    if (bombs.has(idx)) {
+    const cellType = board[idx]
+
+    if (cellType === 'bomb') {
       setLastBombHit(idx)
-      resolveRound(false, 0, revealed.length)
+      setRevealed(prev => [...prev, idx])
+      resolveRound(false, 0, diamondsFound)
       return
     }
-    const newRevealed = [...revealed, idx]
-    setRevealed(newRevealed)
-    if (newRevealed.length === SAFE_COUNT) {
-      // ¡Tablero completo! Se acredita automáticamente el PERFECT RUN.
-      resolveRound(true, Math.floor(betAmount * PERFECT_RUN_MULTIPLIER), SAFE_COUNT, true)
+
+    setRevealed(prev => [...prev, idx])
+
+    if (cellType === 'neutral') return // no hace nada, el juego sigue
+
+    // cellType === 'diamond'
+    const newDiamondsFound = diamondsFound + 1
+    setDiamondsFound(newDiamondsFound)
+    if (newDiamondsFound === DIAMOND_COUNT) {
+      // ¡Encontró los 8 diamantes! Se acredita automáticamente el PERFECT RUN.
+      resolveRound(true, Math.floor(betAmount * PERFECT_RUN_MULTIPLIER), newDiamondsFound, true)
     }
   }
 
   const cashOut = () => {
-    if (phase !== 'playing' || safeCount === 0) return
-    resolveRound(true, potentialPayout, safeCount)
+    if (phase !== 'playing' || diamondsFound === 0) return
+    resolveRound(true, potentialPayout, diamondsFound)
   }
 
-  // won = si la ronda termina en victoria (cobró o completó el tablero)
-  // basePayout = tokens antes de aplicar potenciadores
-  const resolveRound = async (won, basePayout, tilesCleared, isPerfectRun = false) => {
+  const resolveRound = async (won, basePayout, diamondsCleared, isPerfectRun = false) => {
     const currentPlayer = player
     const afterBet = currentPlayer.tokens - betAmount
-    const basePoints = won ? (isPerfectRun ? 100 : 20 + tilesCleared * 3) : 5
+    const basePoints = won ? (isPerfectRun ? 100 : 20 + diamondsCleared * 8) : 5
 
     const boostResult = await boostDB.processGameBoosts({
       userId: currentPlayer.id,
@@ -132,10 +140,10 @@ export default function Crash() {
       userId: currentPlayer.id,
       gameType: 'crash',
       betAmount,
-      result: { tilesCleared, won, perfectRun: isPerfectRun },
+      result: { diamondsCleared, won, perfectRun: isPerfectRun },
       winAmount: won ? boostResult.finalPayout : (boostResult.shieldUsed ? betAmount : 0),
       profit: won ? boostResult.finalPayout - betAmount : (boostResult.shieldUsed ? 0 : -betAmount),
-      gameDetails: { tilesCleared, perfectRun: isPerfectRun, boostApplied: boostResult.shieldUsed || boostResult.boostBonusTokens > 0 },
+      gameDetails: { diamondsCleared, perfectRun: isPerfectRun, boostApplied: boostResult.shieldUsed || boostResult.boostBonusTokens > 0 },
     })
 
     await statsDB.recordGame({
@@ -146,7 +154,7 @@ export default function Crash() {
     })
   }
 
-  const reset = () => { setPhase('idle'); setRevealed([]); setBombs(new Set()); setLastBombHit(null) }
+  const reset = () => { setPhase('idle'); setRevealed([]); setBoard([]); setDiamondsFound(0); setLastBombHit(null) }
   const changeBet = (d) => setBetAmount(p => Math.max(10, Math.min(player?.tokens || 0, p + d)))
 
   const isRoundOver = phase === 'exploded' || phase === 'cashed' || phase === 'perfect'
@@ -168,7 +176,7 @@ export default function Crash() {
           {phase === 'playing' && (
             <motion.div key="playing" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
               <p className="text-3xl font-black" style={{ color: '#f6d365' }}>x{currentMultiplier.toFixed(2)}</p>
-              <p className="text-[10px] text-muted-foreground">{safeCount}/{SAFE_COUNT} casillas seguras · {potentialPayout.toLocaleString()} TOKENS</p>
+              <p className="text-[10px] text-muted-foreground">💎 {diamondsFound}/{DIAMOND_COUNT} diamantes · {potentialPayout.toLocaleString()} TOKENS</p>
             </motion.div>
           )}
           {phase === 'exploded' && (
@@ -186,7 +194,7 @@ export default function Crash() {
           {phase === 'perfect' && (
             <motion.div key="perfect" initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
               <p className="text-2xl font-black" style={{ color: '#f6d365' }}>💎 ¡PERFECT RUN!</p>
-              <p className="text-[10px] text-muted-foreground">Tablero completo · x{PERFECT_RUN_MULTIPLIER.toFixed(0)} · +{resultAmount.toLocaleString()} TOKENS</p>
+              <p className="text-[10px] text-muted-foreground">8/8 diamantes · x{PERFECT_RUN_MULTIPLIER.toFixed(0)} · +{resultAmount.toLocaleString()} TOKENS</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -199,8 +207,8 @@ export default function Crash() {
           border: '3px solid #8B6914', boxShadow: '0 0 0 2px #d4a017',
         }}>
           {Array.from({ length: GRID_SIZE }, (_, idx) => {
-            const isRevealedSafe = revealed.includes(idx)
-            const isBombCell = bombs.has(idx)
+            const cellType = board[idx]
+            const isRevealed = revealed.includes(idx)
             const showAll = isRoundOver
             const isTheBombHit = idx === lastBombHit
 
@@ -208,25 +216,31 @@ export default function Crash() {
             let bg = 'rgba(0,0,0,0.35)'
             let border = 'rgba(255,255,255,0.15)'
 
-            if (showAll && isBombCell) {
+            if (showAll && cellType === 'bomb') {
               content = <Bomb size={16} className={isTheBombHit ? 'text-white' : 'text-red-300'} />
               bg = isTheBombHit ? 'radial-gradient(circle, #dc2626, #7f1d1d)' : 'rgba(127,29,29,0.5)'
               border = 'rgba(220,38,38,0.6)'
-            } else if (showAll && !isBombCell) {
+            } else if (showAll && cellType === 'diamond') {
               content = <Gem size={16} className="text-primary" />
-              bg = isRevealedSafe ? 'radial-gradient(circle, #fde68a, #d4a017)' : 'rgba(212,160,23,0.15)'
+              bg = isRevealed ? 'radial-gradient(circle, #fde68a, #d4a017)' : 'rgba(212,160,23,0.15)'
               border = 'rgba(212,160,23,0.4)'
-            } else if (isRevealedSafe) {
+            } else if (showAll && cellType === 'neutral') {
+              bg = 'rgba(255,255,255,0.03)'
+              border = 'rgba(255,255,255,0.08)'
+            } else if (isRevealed && cellType === 'diamond') {
               content = <Gem size={16} className="text-yellow-900" />
               bg = 'radial-gradient(circle, #fde68a, #d4a017)'
               border = '#f6d365'
+            } else if (isRevealed && cellType === 'neutral') {
+              bg = 'rgba(255,255,255,0.05)'
+              border = 'rgba(255,255,255,0.1)'
             }
 
             return (
               <button
                 key={idx}
                 onClick={() => revealCell(idx)}
-                disabled={phase !== 'playing' || isRevealedSafe}
+                disabled={phase !== 'playing' || isRevealed}
                 className="w-12 h-12 rounded-lg flex items-center justify-center transition-all active:scale-90 disabled:active:scale-100"
                 style={{ background: bg, border: `1.5px solid ${border}` }}
               >
@@ -264,10 +278,10 @@ export default function Crash() {
           </div>
           <div className="px-4 pb-4 pt-1">
             {phase === 'playing' ? (
-              <button onClick={cashOut} disabled={safeCount === 0}
+              <button onClick={cashOut} disabled={diamondsFound === 0}
                 className="w-full py-3.5 rounded-2xl text-white font-black text-lg tracking-widest active:scale-95 disabled:opacity-40"
                 style={{ background: 'linear-gradient(180deg,#166534,#14532d)', border: '2px solid rgba(34,197,94,0.4)' }}>
-                💰 COBRAR {safeCount > 0 ? potentialPayout.toLocaleString() : ''}
+                💰 COBRAR {diamondsFound > 0 ? potentialPayout.toLocaleString() : ''}
               </button>
             ) : isRoundOver ? (
               <button onClick={reset}
