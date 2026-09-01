@@ -30,11 +30,24 @@ export async function processPurchase({ userId, tonPaid, tokensToCredit, current
   return { newBalance, devShare, bankRetains }
 }
 
-export async function processAdReward({ userId, currentBalance, adsgramPayment = 0.001 }) {
+// Ahora recibe también los puntos actuales del jugador (totales y de la semana)
+// para poder acreditarle puntos además de tokens por ver el anuncio.
+export async function processAdReward({ userId, currentBalance, currentPoints = 0, currentWeeklyPoints = 0, adsgramPayment = 0.001 }) {
   const devShare = adsgramPayment * CONFIG.DEV_SHARE
   const bankRetains = adsgramPayment - devShare
-  const newBalance = await creditUser(userId, CONFIG.TOKENS_PER_AD, 'ad_reward', currentBalance)
-  return { newBalance, tokensEarned: CONFIG.TOKENS_PER_AD }
+  const tokensEarned = CONFIG.TOKENS_PER_AD
+  const pointsEarned = CONFIG.POINTS_PER_AD
+  const newBalance = currentBalance + tokensEarned
+
+  const updatedPlayer = await userDB.update(userId, {
+    tokens: newBalance,
+    points: currentPoints + pointsEarned,
+    weekly_points: currentWeeklyPoints + pointsEarned,
+  })
+
+  await transactionDB.create({ userId, amount: tokensEarned, type: 'credit', source: 'ad_reward', balanceAfter: newBalance })
+
+  return { newBalance, tokensEarned, pointsEarned, updatedPlayer }
 }
 
 export async function processExpressWithdrawalAds({ userId, adsgramPayment = 0.002 }) {
