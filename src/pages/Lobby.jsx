@@ -54,14 +54,16 @@ export default function Lobby() {
     setWatchingAd(true)
     setAdMessage(null)
 
-    showAd({
+        showAd({
       onReward: async () => {
-        const { newBalance } = await processAdReward({
+        const { newBalance, pointsEarned, updatedPlayer } = await processAdReward({
           userId: player.id,
           currentBalance: player.tokens,
+          currentPoints: player.points,
+          currentWeeklyPoints: player.weekly_points,
         })
-        setPlayer(prev => ({ ...prev, tokens: newBalance }))
-        setAdMessage(`¡Ganaste ${CONFIG.TOKENS_PER_AD} TOKENS! 🎉`)
+        setPlayer(updatedPlayer)
+        setAdMessage(`¡Ganaste ${CONFIG.TOKENS_PER_AD} TOKENS y ${pointsEarned} PTS! 🎉`)
         setWatchingAd(false)
       },
       onSkip: () => {
