@@ -1,54 +1,49 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 
-// Modal flotante que avisa cuándo se activó un potenciador del inventario.
-// Se usa en los 6 juegos de casino de forma idéntica.
+const AUTO_DISMISS_MS = 3500
+
+// Notificación flotante que avisa cuándo se activó un potenciador del inventario.
+// Se autodestruye sola después de unos segundos (igual que el aviso de compra
+// exitosa de la Tienda) para no interrumpir el ritmo del juego con un cartel
+// que el jugador tenga que cerrar a mano. Sigue siendo tocable: si el jugador
+// la toca, lo lleva directo a la Tienda por si quiere comprar otro potenciador.
 export default function BoostAlert({ notification, onClose }) {
+  useEffect(() => {
+    if (!notification) return
+    const timer = setTimeout(onClose, AUTO_DISMISS_MS)
+    return () => clearTimeout(timer)
+  }, [notification, onClose])
+
   return (
     <AnimatePresence>
       {notification && (
         <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center px-6"
-          style={{ background: 'rgba(0,0,0,0.72)' }}
+          initial={{ y: -60, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -60, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+          className="fixed left-4 right-4 z-[100]"
+          style={{ top: '6.5rem' }}
         >
-          <motion.div
-            initial={{ scale: 0.85, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            className="w-full max-w-xs rounded-2xl p-5 text-center"
+          <Link
+            to="/store"
+            onClick={onClose}
+            className="flex items-center gap-3 rounded-2xl px-3.5 py-3 active:scale-95 transition-all"
             style={{
-              background: 'linear-gradient(180deg, #1a1200 0%, #0d0900 100%)',
+              background: 'linear-gradient(135deg, #1a1200, #0d0900)',
               border: '2px solid rgba(212,160,23,0.5)',
-              boxShadow: '0 0 30px rgba(212,160,23,0.3), 0 8px 32px rgba(0,0,0,0.7)',
+              boxShadow: '0 0 20px rgba(212,160,23,0.25), 0 8px 24px rgba(0,0,0,0.6)',
             }}
           >
-            <div className="text-5xl mb-2">{notification.emoji}</div>
-            <h3 className="text-base font-black text-white mb-1.5 tracking-wide">
-              {notification.title}
-            </h3>
-            <p className="text-xs text-white/70 leading-relaxed mb-5">
-              {notification.message}
-            </p>
-
-            <button
-              onClick={onClose}
-              className="w-full py-3 rounded-xl font-black text-sm tracking-widest active:scale-95 transition-all mb-2"
-              style={{ background: 'linear-gradient(135deg, #f6d365, #d4a017)', color: '#1a0e05' }}
-            >
-              ACEPTAR
-            </button>
-
-            <Link to="/store" onClick={onClose}>
-              <button
-                className="w-full py-2.5 rounded-xl font-bold text-xs tracking-wide active:scale-95 transition-all"
-                style={{ background: 'rgba(212,160,23,0.1)', border: '1px solid rgba(212,160,23,0.3)', color: '#f6d365' }}
-              >
-                🛒 Ver más potenciadores en la Tienda
-              </button>
-            </Link>
-          </motion.div>
+            <span className="text-2xl shrink-0">{notification.emoji}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black text-white truncate">{notification.title}</p>
+              <p className="text-[10px] text-white/60 truncate">{notification.message}</p>
+            </div>
+            <span className="text-[9px] font-black text-primary shrink-0 whitespace-nowrap">TIENDA →</span>
+          </Link>
         </motion.div>
       )}
     </AnimatePresence>
