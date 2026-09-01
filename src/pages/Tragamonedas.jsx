@@ -8,21 +8,32 @@ import BoostAlert from '@/components/BoostAlert'
 
 const SYMBOLS = ['🍒','🍋','🍊','⭐','💎','7️⃣','🔔','🍇']
 const FRUIT_SYMBOLS = ['🍒','🍋','🍊','🍇']
+const FRUIT_PAYOUT = 2 // cualquier fruta repetida (🍒🍇🍊🍋) paga igual: x2
+
+// Solo los símbolos "especiales" (no frutas) tienen su propio multiplicador.
+// Las frutas se resuelven aparte, todas al mismo pago (ver FRUIT_PAYOUT).
 const PAYOUTS = {
-  '7️⃣7️⃣7️⃣':40,'💎💎💎':15,'⭐⭐⭐':8,'🔔🔔🔔':6,
-  '🍒🍒🍒':4,'🍇🍇🍇':4,'🍊🍊🍊':3,'🍋🍋🍋':2,
+  '7️⃣7️⃣7️⃣': 40,
+  '💎💎💎': 15,
+  '⭐⭐⭐': 8,
+  '🔔🔔🔔': 4,
 }
+
 const INFO = [
   '🎰 Gira 3 carretes. Si los 3 muestran el mismo símbolo, ¡ganas!',
-  '7️⃣ Triple 7: ganas x40.',
+  '7️⃣ Triple 7: ganas x40 (el más raro de todos).',
   '💎 Triple Diamante: x15.',
   '⭐ Triple Estrella: x8.',
-  '🔔 Triple Campana: x6.',
+  '🔔 Triple Campana: x4.',
+  '🍒🍇🍊🍋 Cualquier fruta repetida 3 veces (no importa cuál): x2 — es la combinación más común, por eso paga menos.',
   '✅ Elige tu apuesta y presiona GIRAR.',
 ]
+
+// Probabilidades ajustadas para que el premio sea inverso a la rareza:
+// mientras más difícil de conseguir, mayor el pago.
 const REEL_POOL = [
-  ...Array(9).fill('🍋'), ...Array(9).fill('🍊'), ...Array(8).fill('🍒'), ...Array(8).fill('🍇'),
-  ...Array(5).fill('🔔'), ...Array(4).fill('⭐'), ...Array(2).fill('💎'), ...Array(1).fill('7️⃣'),
+  ...Array(9).fill('🍋'), ...Array(9).fill('🍊'), ...Array(9).fill('🍒'), ...Array(9).fill('🍇'),
+  ...Array(6).fill('🔔'), ...Array(4).fill('⭐'), ...Array(2).fill('💎'), ...Array(1).fill('7️⃣'),
 ]
 function randomSymbol() { return REEL_POOL[Math.floor(Math.random()*REEL_POOL.length)] }
 
@@ -75,10 +86,16 @@ export default function Tragamonedas() {
       setReels([r1,r2,r3])
       const combo=`${r1}${r2}${r3}`
       let mult=PAYOUTS[combo]||0
-      if (!mult && r1===r2 && r2===r3 && FRUIT_SYMBOLS.includes(r1)) mult=2
+      if (!mult && r1===r2 && r2===r3 && FRUIT_SYMBOLS.includes(r1)) mult=FRUIT_PAYOUT
       const won=mult>0
       const basePayout=won?betAmount*mult:0
       const basePoints = won ? 35 : 4
+
+      setOutcome({won,payout:basePayout,mult})
+      // Detenemos la animación de los carretes AQUÍ MISMO, apenas se conoce el
+      // resultado — así el modal de potenciadores (que viene después) nunca
+      // aparece mientras los carretes siguen girando.
+      setSpinning(false)
 
       // 2. Aplicamos los potenciadores activos del inventario.
       const boostResult = await boostDB.processGameBoosts({
@@ -92,8 +109,6 @@ export default function Tragamonedas() {
       // 3. Acreditamos el resultado final (ganancia, o reembolso si el escudo se activó).
       const finalTokens = afterBet + boostResult.finalPayout
 
-      setOutcome({won,payout:basePayout,mult})
-
       const updated = await userDB.update(currentPlayer.id, {
         tokens: finalTokens,
         points: (currentPlayer.points || 0) + boostResult.finalPoints,
@@ -101,13 +116,14 @@ export default function Tragamonedas() {
       })
       setPlayer(updated)
 
+      // 4. Mostramos el aviso de potenciador (ya con la animación totalmente detenida).
+      const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
+      if (notifications.length > 0) setBoostQueue(notifications)
+
+      // Si perdió de verdad (sin escudo), esos tokens alimentan el Jackpot semanal.
       if (!won && !boostResult.shieldUsed) {
         await jackpotDB.addToPot(betAmount)
       }
-
-      // 4. Mostramos el aviso de potenciador si aplicó alguno.
-      const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
-      if (notifications.length > 0) setBoostQueue(notifications)
 
       await gameHistoryDB.create({
         userId: currentPlayer.id,
@@ -125,8 +141,6 @@ export default function Tragamonedas() {
         payout: basePayout,
         betAmount: boostResult.shieldUsed ? 0 : betAmount,
       })
-
-      setSpinning(false)
     }, 1800)
   }
 
@@ -134,7 +148,7 @@ export default function Tragamonedas() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{background:'linear-gradient(180deg,#1a0e05,#0d0704)'}}>
-      <GameHeader title="SLOTS" player={player} infoTitle="Cómo jugar Tragamonedas" infoContent={INFO} />
+      <GameHeader player={player} title="SLOTS" infoTitle="Cómo jugar Tragamonedas" infoContent={INFO} />
       <BoostAlert
         notification={boostQueue[0] || null}
         onClose={() => setBoostQueue(prev => prev.slice(1))}
@@ -154,19 +168,6 @@ export default function Tragamonedas() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-        </div>
-      </div>
-      <div className="px-4 mb-2">
-        <div className="rounded-xl px-3 py-2" style={{background:'rgba(212,160,23,0.08)',border:'1px solid rgba(212,160,23,0.2)'}}>
-          <p className="text-[9px] text-primary font-black tracking-widest text-center mb-1.5">PREMIOS</p>
-          <div className="grid grid-cols-4 gap-1 text-center">
-            {Object.entries(PAYOUTS).slice(0,4).map(([k,v])=>(
-              <div key={k} className="text-[10px]">
-                <div>{k.slice(0,2)}x3</div>
-                <div className="text-primary font-bold">x{v}</div>
-              </div>
-            ))}
           </div>
         </div>
       </div>
