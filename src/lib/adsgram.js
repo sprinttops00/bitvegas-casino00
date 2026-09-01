@@ -15,10 +15,20 @@ export function showAd({ onReward, onSkip, onError }) {
   const AdController = window.Adsgram.init({ blockId })
   AdController.show()
     .then((result) => {
-      if (result.done) { if (onReward) onReward(result) }
-      else { if (onSkip) onSkip(result) }
+      // Según la documentación oficial de Adsgram, la promesa SOLO se resuelve
+      // (entra aquí) si el usuario vio el anuncio completo. Cualquier otro caso
+      // (error o el usuario lo saltó) cae en el .catch() de abajo.
+      if (onReward) onReward(result)
     })
-    .catch((err) => { if (onError) onError(err) })
+    .catch((result) => {
+      // Puede ser que el usuario haya cerrado el anuncio antes de terminar,
+      // o que haya ocurrido un error real. Distinguimos usando result.error.
+      if (result?.error) {
+        if (onError) onError(result)
+      } else {
+        if (onSkip) onSkip(result)
+      }
+    })
 }
 
 export function showDoubleAd({ onComplete, onFail }) {
