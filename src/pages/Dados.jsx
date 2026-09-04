@@ -79,6 +79,7 @@ export default function Dados() {
     setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
     
     // 1. Descontamos la apuesta del saldo de inmediato, antes de la animación.
+    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
     const afterBet = currentPlayer.tokens - betAmount
     const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
     setPlayer(deducted)
