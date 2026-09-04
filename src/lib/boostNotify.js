@@ -1,5 +1,10 @@
 // Traduce el resultado de boostDB.processGameBoosts() en mensajes claros para el jugador.
 // Puede devolver varias notificaciones si se activó más de un potenciador a la vez.
+// Cada una lleva un `id` único, necesario para poder apilarlas en pantalla.
+
+function makeId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
 
 export function getBoostNotifications({ boostResult, betAmount, basePoints }) {
   const notifications = []
@@ -10,6 +15,7 @@ export function getBoostNotifications({ boostResult, betAmount, basePoints }) {
   // 🛡️ Escudo Anti-Pérdida
   if (shieldUsed) {
     notifications.push({
+      id: makeId(),
       emoji: '🛡️',
       title: 'Escudo Anti-Pérdida Activado',
       message: `Se protegieron tus ${betAmount.toLocaleString()} TOKENS de esta partida perdedora. Tu escudo se ha consumido.`,
@@ -25,6 +31,7 @@ export function getBoostNotifications({ boostResult, betAmount, basePoints }) {
     if (hasVip) names.push('Pase VIP (+10%)')
 
     notifications.push({
+      id: makeId(),
       emoji: hasVip ? '👑' : '🍀',
       title: names.length ? names.join(' + ') : 'Bono de Potenciador',
       message: `¡Ganaste +${boostBonusTokens.toLocaleString()} TOKENS extra gracias a tu potenciador activo!`,
@@ -34,6 +41,7 @@ export function getBoostNotifications({ boostResult, betAmount, basePoints }) {
   // ⚡ Doble Puntos (VIP o Doble PTS)
   if (finalPoints > basePoints) {
     notifications.push({
+      id: makeId(),
       emoji: '⚡',
       title: 'Doble Puntos Activado',
       message: `Tus puntos de ranking se duplicaron en esta partida: +${finalPoints.toLocaleString()} PTS.`,
