@@ -65,6 +65,8 @@ export default function Loteria() {
     setDrawing(true); setDrawn([]); setOutcome(null)
     const currentPlayer = player
 
+    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
+
     // 1. Descontamos la apuesta del saldo de inmediato, antes de que empiece el sorteo.
     const afterBet = currentPlayer.tokens - betAmount
     const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
@@ -111,7 +113,7 @@ export default function Loteria() {
 
     // 4. Mostramos el aviso de potenciador si aplicó alguno.
     const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
-    if (notifications.length > 0) setBoostQueue(notifications)
+    if (notifications.length > 0) setBoostQueue(prev => [...prev, ...notifications])
 
     await gameHistoryDB.create({
       userId: currentPlayer.id,
@@ -138,8 +140,8 @@ export default function Loteria() {
     <div className="min-h-screen flex flex-col" style={{background:'linear-gradient(180deg,#1a0e05,#0d0704)'}}>
       <GameHeader title="LOTERÍA" player={player} infoTitle="Cómo jugar Lotería" infoContent={INFO} />
       <BoostAlert
-        notification={boostQueue[0] || null}
-        onClose={() => setBoostQueue(prev => prev.slice(1))}
+        notifications={boostQueue}
+        onDismiss={(id) => setBoostQueue(prev => prev.filter(n => n.id !== id))}
       />
       <p className="text-xs text-muted-foreground text-center mb-2">Elige {PICK_COUNT} números del 1 al {TOTAL_BALLS}</p>
       <div className="px-4 mb-2">
