@@ -65,9 +65,10 @@ export default function Loteria() {
     setDrawing(true); setDrawn([]); setOutcome(null)
     const currentPlayer = player
 
-    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
+    
 
     // 1. Descontamos la apuesta del saldo de inmediato, antes de que empiece el sorteo.
+    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
     const afterBet = currentPlayer.tokens - betAmount
     const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
     setPlayer(deducted)
