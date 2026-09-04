@@ -63,6 +63,8 @@ export default function HighLow() {
     const currentSide = side
     const currentMultiplier = multiplier
 
+    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
+
     // 1. Descontamos la apuesta del saldo de inmediato, antes de la animación.
     const afterBet = currentPlayer.tokens - betAmount
     const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
@@ -105,7 +107,7 @@ export default function HighLow() {
 
     // 4. Mostramos el aviso de potenciador si aplicó alguno.
     const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
-    if (notifications.length > 0) setBoostQueue(notifications)
+    if (notifications.length > 0) setBoostQueue(prev => [...prev, ...notifications])
 
     // Si perdió de verdad (sin escudo), esos tokens alimentan el Jackpot semanal.
     if (!won && !boostResult.shieldUsed) {
@@ -138,8 +140,8 @@ export default function HighLow() {
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #1a0e05 0%, #0d0704 100%)' }}>
       <GameHeader player={player} title="HIGH / LOW" infoTitle="Cómo jugar High/Low" infoContent={INFO} />
       <BoostAlert
-        notification={boostQueue[0] || null}
-        onClose={() => setBoostQueue(prev => prev.slice(1))}
+        notifications={boostQueue}
+        onDismiss={(id) => setBoostQueue(prev => prev.filter(n => n.id !== id))}
       />
 
       {/* Número generado */}
