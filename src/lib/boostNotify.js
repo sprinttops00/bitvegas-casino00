@@ -22,17 +22,19 @@ export function getBoostNotifications({ boostResult, betAmount, basePoints }) {
     })
   }
 
-  // 🍀 Amuleto de Suerte / 👑 Pase VIP (bono de tokens en victoria)
+  // 🍀 Amuleto de Suerte / 🔥 Amuleto Legendario / 👑 Pase VIP (bono de tokens en victoria)
   if (boostBonusTokens > 0) {
-    const hasLucky = activeBoosts?.some(b => b.boost_type === 'lucky_charm')
+    const hasLegendary = activeBoosts?.some(b => b.boost_type === 'lucky_charm_legendary')
+    const hasLucky = !hasLegendary && activeBoosts?.some(b => b.boost_type === 'lucky_charm')
     const hasVip = activeBoosts?.some(b => b.boost_type === 'vip_pass')
     const names = []
-    if (hasLucky) names.push('Amuleto de Suerte (+15%)')
+    if (hasLegendary) names.push('Amuleto Legendario (+30%)')
+    else if (hasLucky) names.push('Amuleto de Suerte (+15%)')
     if (hasVip) names.push('Pase VIP (+10%)')
 
     notifications.push({
       id: makeId(),
-      emoji: hasVip ? '👑' : '🍀',
+      emoji: hasLegendary ? '🔥' : hasVip ? '👑' : '🍀',
       title: names.length ? names.join(' + ') : 'Bono de Potenciador',
       message: `¡Ganaste +${boostBonusTokens.toLocaleString()} TOKENS extra gracias a tu potenciador activo!`,
     })
