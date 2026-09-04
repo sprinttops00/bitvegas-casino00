@@ -76,6 +76,8 @@ export default function Dados() {
     const currentPlayer = player
     const d1=Math.floor(Math.random()*6)+1, d2=Math.floor(Math.random()*6)+1
 
+    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
+    
     // 1. Descontamos la apuesta del saldo de inmediato, antes de la animación.
     const afterBet = currentPlayer.tokens - betAmount
     const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
@@ -116,7 +118,7 @@ export default function Dados() {
 
       // 4. Mostramos el aviso de potenciador si aplicó alguno.
       const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
-      if (notifications.length > 0) setBoostQueue(notifications)
+      if (notifications.length > 0) setBoostQueue(prev => [...prev, ...notifications])
 
       await gameHistoryDB.create({
         userId: currentPlayer.id,
@@ -145,8 +147,8 @@ export default function Dados() {
     <div className="min-h-screen flex flex-col" style={{background:'linear-gradient(180deg,#1a0e05,#0d0704)'}}>
       <GameHeader title="DADOS" player={player} infoTitle="Cómo jugar Dados" infoContent={INFO} />
       <BoostAlert
-        notification={boostQueue[0] || null}
-        onClose={() => setBoostQueue(prev => prev.slice(1))}
+        notifications={boostQueue}
+        onDismiss={(id) => setBoostQueue(prev => prev.filter(n => n.id !== id))}
       />
       <div className="flex justify-center items-center gap-6 py-4">
         <Die value={dice[0]} rolling={rolling} />
