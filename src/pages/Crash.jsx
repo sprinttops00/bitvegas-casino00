@@ -63,6 +63,7 @@ export default function Crash() {
   const startRound = async () => {
     if (!player || phase === 'playing' || betAmount > player.tokens) return
     // 1. Descontamos la apuesta del saldo de inmediato, antes de iniciar el tablero.
+    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
     const afterBet = player.tokens - betAmount
     const updated = await userDB.update(player.id, { tokens: afterBet })
     setPlayer(updated)
@@ -134,7 +135,7 @@ export default function Crash() {
     }
 
     const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
-    if (notifications.length > 0) setBoostQueue(notifications)
+    if (notifications.length > 0) setBoostQueue(prev => [...prev, ...notifications])
 
     await gameHistoryDB.create({
       userId: currentPlayer.id,
@@ -163,8 +164,8 @@ export default function Crash() {
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #1a0e05 0%, #0d0704 100%)' }}>
       <GameHeader player={player} title="CRASH" infoTitle="Cómo jugar Crash" infoContent={INFO} />
       <BoostAlert
-        notification={boostQueue[0] || null}
-        onClose={() => setBoostQueue(prev => prev.slice(1))}
+        notifications={boostQueue}
+        onDismiss={(id) => setBoostQueue(prev => prev.filter(n => n.id !== id))}
       />
 
       {/* Multiplicador actual / resultado */}
