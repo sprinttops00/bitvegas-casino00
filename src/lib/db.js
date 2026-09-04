@@ -271,7 +271,7 @@ export const boostDB = {
   },
 
   // Procesa automáticamente los potenciadores activos en cada partida de juego
-  async processGameBoosts({ userId, won, betAmount, basePayout, basePoints }) {
+    async processGameBoosts({ userId, won, betAmount, basePayout, basePoints }) {
     try {
       const activeBoosts = await boostDB.getActiveByUser(userId)
 
@@ -281,24 +281,33 @@ export const boostDB = {
       let boostBonusTokens = 0
 
       if (activeBoosts && activeBoosts.length > 0) {
-        // 1. Escudo Anti-Pérdida (Shield) si perdió
+        // 1. Escudo Anti-Pérdida si perdió. Se prioriza el ESCUDO DIARIO (no se
+        // consume, protege todas las pérdidas durante 24h) sobre el de un solo uso.
         if (!won && betAmount > 0) {
-          const shieldBoost = activeBoosts.find(b => b.boost_type === 'shield')
-          if (shieldBoost) {
+          const dailyShield = activeBoosts.find(b => b.boost_type === 'shield_daily')
+          const singleShield = activeBoosts.find(b => b.boost_type === 'shield')
+          if (dailyShield) {
+            finalPayout = betAmount // Reembolsa la apuesta completa (NO se consume, dura 24h)
+            shieldUsed = true
+          } else if (singleShield) {
             finalPayout = betAmount // Reembolsa la apuesta completa
             shieldUsed = true
-            await boostDB.consume(shieldBoost.id) // Consume el escudo (1 solo uso)
+            await boostDB.consume(singleShield.id) // Consume el escudo (1 solo uso)
           }
         }
 
-        // 2. Multiplicadores de ganancia en victoria (Lucky Charm / VIP Pass)
+        // 2. Multiplicadores de ganancia en victoria (Amuleto / Amuleto Legendario / VIP Pass)
         if (won) {
           const netProfit = Math.max(0, basePayout - betAmount)
+          const legendaryBoost = activeBoosts.find(b => b.boost_type === 'lucky_charm_legendary')
           const luckyBoost = activeBoosts.find(b => b.boost_type === 'lucky_charm')
           const vipBoost = activeBoosts.find(b => b.boost_type === 'vip_pass')
 
           let winBonusRate = 0
-          if (luckyBoost) winBonusRate += 0.15 // +15% extra
+          // El Amuleto Legendario (+30%) y el normal (+15%) no se suman entre sí:
+          // se usa el más fuerte que tengas activo. El VIP siempre suma aparte.
+          if (legendaryBoost) winBonusRate += 0.30
+          else if (luckyBoost) winBonusRate += 0.15
           if (vipBoost) winBonusRate += 0.10 // +10% extra
 
           if (winBonusRate > 0) {
@@ -332,7 +341,6 @@ export const boostDB = {
       }
     }
   },
-}
 
 // ── JACKPOT SEMANAL DEL RANKING ──────────────────────────────
 export const jackpotDB = {
