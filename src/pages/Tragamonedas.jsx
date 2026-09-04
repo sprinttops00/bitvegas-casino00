@@ -77,6 +77,8 @@ export default function Tragamonedas() {
     const currentPlayer = player
     const r1=randomSymbol(),r2=randomSymbol(),r3=randomSymbol()
 
+    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
+
     // 1. Descontamos la apuesta del saldo de inmediato, antes de la animación.
     const afterBet = currentPlayer.tokens - betAmount
     const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
@@ -118,7 +120,7 @@ export default function Tragamonedas() {
 
       // 4. Mostramos el aviso de potenciador (ya con la animación totalmente detenida).
       const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
-      if (notifications.length > 0) setBoostQueue(notifications)
+      if (notifications.length > 0) setBoostQueue(prev => [...prev, ...notifications])
 
       // Si perdió de verdad (sin escudo), esos tokens alimentan el Jackpot semanal.
       if (!won && !boostResult.shieldUsed) {
@@ -150,8 +152,8 @@ export default function Tragamonedas() {
     <div className="min-h-screen flex flex-col" style={{background:'linear-gradient(180deg,#1a0e05,#0d0704)'}}>
       <GameHeader player={player} title="SLOTS" infoTitle="Cómo jugar Tragamonedas" infoContent={INFO} />
       <BoostAlert
-        notification={boostQueue[0] || null}
-        onClose={() => setBoostQueue(prev => prev.slice(1))}
+        notifications={boostQueue}
+        onDismiss={(id) => setBoostQueue(prev => prev.filter(n => n.id !== id))}
       />
       <div className="flex justify-center mb-3 px-4">
         <div className="rounded-3xl p-5 w-full max-w-xs" style={{background:'linear-gradient(180deg,#4a2e0a,#2a1505)',border:'4px solid #8B6914',boxShadow:'0 0 0 2px #d4a017'}}>
