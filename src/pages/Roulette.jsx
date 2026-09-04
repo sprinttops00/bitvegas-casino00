@@ -121,6 +121,8 @@ export default function Roulette() {
     const newRotation = rotation + (spins * 360) + (360 - (rotation % 360)) + (360 - targetAngle) % 360
     setRotation(newRotation)
 
+    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
+
     // 1. Descontamos la apuesta del saldo de inmediato, antes de que corra la animación.
     const currentPlayer = player
     const afterBet = currentPlayer.tokens - betAmount
@@ -160,7 +162,7 @@ export default function Roulette() {
 
       // 4. Mostramos el aviso de potenciador si aplicó alguno.
       const notifications = getBoostNotifications({ boostResult, betAmount, basePoints })
-      if (notifications.length > 0) setBoostQueue(notifications)
+      if (notifications.length > 0) setBoostQueue(prev => [...prev, ...notifications])
 
       await gameHistoryDB.create({
         userId: currentPlayer.id,
@@ -190,8 +192,8 @@ export default function Roulette() {
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #1a0e05 0%, #0d0704 100%)' }}>
       <GameHeader title="RULETA" player={player} infoTitle="Cómo jugar Ruleta" infoContent={INFO} />
       <BoostAlert
-        notification={boostQueue[0] || null}
-        onClose={() => setBoostQueue(prev => prev.slice(1))}
+        notifications={boostQueue}
+        onDismiss={(id) => setBoostQueue(prev => prev.filter(n => n.id !== id))}
       />
       <div className="flex justify-center mb-2">
         <RouletteWheel rotation={rotation} spinning={spinning} />
