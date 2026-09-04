@@ -121,9 +121,10 @@ export default function Roulette() {
     const newRotation = rotation + (spins * 360) + (360 - (rotation % 360)) + (360 - targetAngle) % 360
     setRotation(newRotation)
 
-    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
+    
 
     // 1. Descontamos la apuesta del saldo de inmediato, antes de que corra la animación.
+    setBoostQueue([]) // limpia cualquier aviso de potenciador que siga visible de la ronda anterior
     const currentPlayer = player
     const afterBet = currentPlayer.tokens - betAmount
     const deducted = await userDB.update(currentPlayer.id, { tokens: afterBet })
