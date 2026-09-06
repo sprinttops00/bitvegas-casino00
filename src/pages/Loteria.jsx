@@ -10,15 +10,17 @@ const TOTAL_BALLS = 30
 const PICK_COUNT = 5
 const DRAW_COUNT = 7
 const PRIZE_TABLE = [
-  { matches:5, mult:60, label:'¡JACKPOT!' },
-  { matches:4, mult:12, label:'4 aciertos' },
-  { matches:3, mult:3, label:'3 aciertos' },
+  { matches:5, mult:50, label:'¡JACKPOT!' },
+  { matches:4, mult:10, label:'4 aciertos' },
+  { matches:3, mult:4, label:'3 aciertos' },
+  { matches:2, mult:2, label:'2 aciertos' },
 ]
 const INFO = [
   '🎱 Elige 5 números del 1 al 30. Se sortean 7 bolas al azar.',
-  '🎯 5 aciertos: JACKPOT x60.',
-  '4️⃣ 4 aciertos: x12.',
-  '3️⃣ 3 aciertos: x3.',
+  '🎯 5 aciertos: JACKPOT x50.',
+  '4️⃣ 4 aciertos: x10.',
+  '3️⃣ 3 aciertos: x4.',
+  '2️⃣ 2 aciertos: x2.',
 ]
 
 function Ball({ number, isMatch, isDrawn, size='md' }) {
