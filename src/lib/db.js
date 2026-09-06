@@ -341,6 +341,7 @@ export const boostDB = {
       }
     }
   },
+}
 
 // ── JACKPOT SEMANAL DEL RANKING ──────────────────────────────
 export const jackpotDB = {
